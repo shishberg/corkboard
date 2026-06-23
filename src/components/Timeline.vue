@@ -5,10 +5,21 @@ import TimelineItem from './TimelineItem.vue'
 const store = usePagesStore()
 
 function onDrop(e: DragEvent) {
+  // Strip-level drop (empty area): append to the end.
   const data = e.dataTransfer?.getData('text/plain') ?? ''
   if (data.startsWith('idx:')) {
     const from = Number(data.slice(4))
     store.reorderTimeline(from, store.timeline.length - 1)
+  } else if (data) {
+    store.addToTimeline(data)
+  }
+}
+
+function onItemDrop(data: string, index: number) {
+  // Drop onto a specific item: the dragged item takes that item's slot index
+  // (the others shift to fill the gap). Page ids from the sidebar still append.
+  if (data.startsWith('idx:')) {
+    store.reorderTimeline(Number(data.slice(4)), index)
   } else if (data) {
     store.addToTimeline(data)
   }
@@ -33,6 +44,7 @@ function onDrop(e: DragEvent) {
       :delay-ms="entry.delayMs"
       @set-delay="store.setTimelineDelay(i, $event)"
       @remove="store.removeFromTimeline(i)"
+      @drop-data="onItemDrop($event, i)"
     />
   </div>
 </template>

@@ -7,7 +7,31 @@ import { usePagesStore } from '@/stores/pages'
 
 beforeEach(() => setActivePinia(createPinia()))
 
+function winPointer(type: string, x: number, y: number): PointerEvent {
+  const e = new Event(type) as unknown as { clientX: number; clientY: number; pointerId: number }
+  e.clientX = x
+  e.clientY = y
+  e.pointerId = 1
+  return e as unknown as PointerEvent
+}
+
 describe('EditorCanvas', () => {
+  it('dragging a movable element updates its position in the store', async () => {
+    const store = usePagesStore()
+    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80 })
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+    // Dispatch the pointerdown directly: test-utils' trigger builds a real
+    // MouseEvent whose clientX is read-only, but the composable needs clientX.
+    w.get('[data-role="movable"]').element.dispatchEvent(winPointer('pointerdown', 0, 0))
+    window.dispatchEvent(winPointer('pointermove', 20, 30))
+    window.dispatchEvent(winPointer('pointerup', 20, 30))
+    const moved = store.selectedPage?.elements.find((e) => e.id === 'e1')
+    expect(moved?.x).toBe(20)
+    expect(moved?.y).toBe(30)
+    w.unmount()
+  })
+
   it('renders one MovableElement per element on the selected page', async () => {
     const store = usePagesStore()
     store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80 })

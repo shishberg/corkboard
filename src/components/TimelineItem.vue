@@ -4,7 +4,7 @@ import { usePagesStore } from '@/stores/pages'
 import { X } from '@lucide/vue'
 
 const props = defineProps<{ index: number; pageId: string; delayMs: number }>()
-const emit = defineEmits<{ setDelay: [ms: number]; remove: [] }>()
+const emit = defineEmits<{ setDelay: [ms: number]; remove: []; dropData: [data: string] }>()
 
 const store = usePagesStore()
 const name = computed(() => store.pages.find((p) => p.id === props.pageId)?.name ?? 'Page')
@@ -17,6 +17,9 @@ function onDelay(e: Event) {
 function onDragStart(e: DragEvent) {
   e.dataTransfer?.setData('text/plain', `idx:${props.index}`)
 }
+function onDrop(e: DragEvent) {
+  emit('dropData', e.dataTransfer?.getData('text/plain') ?? '')
+}
 </script>
 
 <template>
@@ -25,6 +28,8 @@ function onDragStart(e: DragEvent) {
     class="flex shrink-0 flex-col items-center gap-1 rounded border bg-white p-2"
     draggable="true"
     @dragstart="onDragStart"
+    @dragover.prevent
+    @drop.prevent.stop="onDrop"
   >
     <div class="flex items-center gap-1">
       <span class="text-xs font-medium">{{ name }}</span>
