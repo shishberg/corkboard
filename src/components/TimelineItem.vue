@@ -4,7 +4,7 @@ import { usePagesStore } from '@/stores/pages'
 import { X } from '@lucide/vue'
 
 const props = defineProps<{ index: number; pageId: string; delayMs: number }>()
-const emit = defineEmits<{ setDelay: [ms: number]; remove: []; reorderFrom: [index: number] }>()
+const emit = defineEmits<{ setDelay: [ms: number]; remove: [] }>()
 
 const store = usePagesStore()
 const name = computed(() => store.pages.find((p) => p.id === props.pageId)?.name ?? 'Page')
