@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { usePagesStore } from '@/stores/pages'
 import MovableElement from './MovableElement.vue'
 import ClockWidget from './widgets/ClockWidget.vue'
@@ -30,6 +30,7 @@ onMounted(() => {
   }
 })
 onBeforeUnmount(() => ro?.disconnect())
+watch(size, recompute)
 
 function clearSelection() {
   store.selectElement(null)
