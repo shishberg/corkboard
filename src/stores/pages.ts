@@ -40,6 +40,7 @@ export const usePagesStore = defineStore('pages', {
       return page.id
     },
     selectPage(id: string) {
+      if (!this.pages.some((p) => p.id === id)) return
       this.selectedPageId = id
       this.selectedElId = null
     },
@@ -61,13 +62,23 @@ export const usePagesStore = defineStore('pages', {
     updateElement(id: string, patch: Partial<BaseEl>) {
       const page = this.pages.find((p) => p.id === this.selectedPageId)
       const el = page?.elements.find((e) => e.id === id)
-      if (el) Object.assign(el, patch)
+      if (el) {
+        const { x, y, w, h } = patch
+        if (x !== undefined) el.x = x
+        if (y !== undefined) el.y = y
+        if (w !== undefined) el.w = w
+        if (h !== undefined) el.h = h
+      }
     },
     addToTimeline(pageId: string) {
+      if (!this.pages.some((p) => p.id === pageId)) return
       this.timeline.push({ pageId, delayMs: 5000 })
     },
     reorderTimeline(from: number, to: number) {
       if (from === to) return
+      const len = this.timeline.length
+      if (!Number.isInteger(from) || from < 0 || from >= len) return
+      if (!Number.isInteger(to) || to < 0 || to >= len) return
       const [moved] = this.timeline.splice(from, 1)
       this.timeline.splice(to, 0, moved)
     },
@@ -76,6 +87,7 @@ export const usePagesStore = defineStore('pages', {
       if (entry) entry.delayMs = delayMs
     },
     removeFromTimeline(index: number) {
+      if (!Number.isInteger(index) || index < 0 || index >= this.timeline.length) return
       this.timeline.splice(index, 1)
     },
   },
