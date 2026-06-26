@@ -9,17 +9,35 @@ beforeEach(() => {
   setActivePinia(createPinia())
 })
 
+function winPointer(type: string, x: number, y: number): PointerEvent {
+  const e = new Event(type) as unknown as { clientX: number; clientY: number; pointerId: number }
+  e.clientX = x
+  e.clientY = y
+  e.pointerId = 1
+  return e as unknown as PointerEvent
+}
+
 describe('App integration', () => {
-  it('adds a clock element when the clock tool is picked, and toggles orientation', async () => {
-    const w = mount(App)
+  it('drag-creates a clock element after picking the clock tool, and toggles orientation', async () => {
+    const w = mount(App, { attachTo: document.body })
     const store = usePagesStore()
 
+    // Picking a tool only makes it active — nothing is added yet.
     await w.get('[data-tool="clock"]').trigger('click')
+    expect(store.activeTool).toBe('clock')
+    expect(store.selectedPage?.elements.length).toBe(0)
+
+    // Dragging on the canvas creates the element.
+    w.get('[data-role="surface"]').element.dispatchEvent(winPointer('pointerdown', 10, 20))
+    window.dispatchEvent(winPointer('pointermove', 110, 140))
+    window.dispatchEvent(winPointer('pointerup', 110, 140))
+    await w.vm.$nextTick()
     expect(store.selectedPage?.elements.some((e) => e.type === 'clock')).toBe(true)
 
     expect(store.orientation).toBe('landscape')
     await w.get('[data-role="orientation"]').trigger('click')
     expect(store.orientation).toBe('portrait')
+    w.unmount()
   })
 
   it('publish shows a toast', async () => {

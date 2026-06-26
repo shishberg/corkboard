@@ -40,6 +40,50 @@ describe('EditorCanvas', () => {
     expect(w.findAll('[data-role="movable"]').length).toBe(1)
   })
 
+  it('Backspace deletes the selected element', async () => {
+    const store = usePagesStore()
+    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80 })
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace' }))
+    expect(store.selectedPage?.elements.length).toBe(0)
+    w.unmount()
+  })
+
+  it('drag-creates an element of the active tool at the dragged rect', async () => {
+    const store = usePagesStore()
+    store.setActiveTool('clock')
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+    // jsdom getBoundingClientRect is all-zero and scale stays 1, so client
+    // coords map straight to surface-local coords.
+    w.get('[data-role="surface"]').element.dispatchEvent(winPointer('pointerdown', 10, 20))
+    window.dispatchEvent(winPointer('pointermove', 110, 140))
+    window.dispatchEvent(winPointer('pointerup', 110, 140))
+    await nextTick()
+    const els = store.selectedPage?.elements ?? []
+    expect(els.length).toBe(1)
+    expect(els[0].type).toBe('clock')
+    expect({ x: els[0].x, y: els[0].y, w: els[0].w, h: els[0].h }).toEqual({ x: 10, y: 20, w: 100, h: 120 })
+    w.unmount()
+  })
+
+  it('pen tool draws a stroke and creates a drawing element', async () => {
+    const store = usePagesStore()
+    store.setActiveTool('draw')
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+    const layer = w.get('[data-role="draw-layer"]').element
+    layer.dispatchEvent(winPointer('pointerdown', 10, 10))
+    window.dispatchEvent(winPointer('pointermove', 30, 40))
+    window.dispatchEvent(winPointer('pointerup', 30, 40))
+    await nextTick()
+    const els = store.selectedPage?.elements ?? []
+    expect(els.length).toBe(1)
+    expect(els[0].type).toBe('drawing')
+    w.unmount()
+  })
+
   it('clears selection when the empty surface is clicked', async () => {
     const store = usePagesStore()
     store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80 })

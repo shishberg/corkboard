@@ -39,6 +39,25 @@ describe('usePagesStore', () => {
     expect(s.selectedElId).toBe('e1')
   })
 
+  it('deleteElement removes the selected element and clears selection', () => {
+    const s = usePagesStore()
+    s.addElement(clockEl('e1'))
+    expect(s.selectedElId).toBe('e1')
+    s.deleteElement()
+    expect(s.selectedPage?.elements.length).toBe(0)
+    expect(s.selectedElId).toBe(null)
+  })
+
+  it('deleteElement(id) removes a specific element', () => {
+    const s = usePagesStore()
+    s.addElement(clockEl('e1'))
+    s.addElement(clockEl('e2'))
+    s.deleteElement('e1')
+    expect(s.selectedPage?.elements.map((e) => e.id)).toEqual(['e2'])
+    // e2 was the selection; deleting e1 leaves it intact
+    expect(s.selectedElId).toBe('e2')
+  })
+
   it('updateElement patches geometry', () => {
     const s = usePagesStore()
     s.addElement(clockEl('e1'))

@@ -5,13 +5,16 @@ import type { CalendarEl } from '@/stores/types'
 const props = defineProps<{ el: CalendarEl }>()
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const isWeek = computed(() => props.el.variant === 'week')
+// Base font tracks the smaller dimension so text scales with the container
+// without overflowing a narrow week grid.
+const baseSize = computed(() => `${Math.max(6, Math.min(props.el.w, props.el.h) * 0.06)}px`)
 const rows = computed(() =>
   props.el.events.length ? props.el.events.map((e) => e.title) : ['Standup 9:00', 'Lunch 12:30'],
 )
 </script>
 
 <template>
-  <div class="h-full w-full overflow-hidden bg-white p-2 text-xs">
+  <div class="h-full w-full overflow-hidden bg-white p-2" :style="{ fontSize: baseSize }">
     <div v-if="isWeek" class="grid grid-cols-7 gap-1">
       <div v-for="d in days" :key="d" data-role="day" class="border p-1 text-center">{{ d }}</div>
     </div>

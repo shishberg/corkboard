@@ -2,12 +2,11 @@
 import { computed, onMounted } from 'vue'
 import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore, ensureToolOptionsPersistence } from '@/stores/toolOptions'
-import { makeElement } from '@/stores/elementFactory'
 import type { ToolId } from '@/stores/types'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import {
-  MousePointer2, Clock, CalendarClock, Calendar, Pencil, Image as ImageIcon,
+  MousePointer2, Clock, CalendarClock, Calendar, Pencil, Image as ImageIcon, Trash2,
 } from '@lucide/vue'
 import ClockOptions from './ToolOptions/ClockOptions.vue'
 import CalendarOptions from './ToolOptions/CalendarOptions.vue'
@@ -23,12 +22,9 @@ const clockGlyph = computed(() =>
 )
 
 function pickTool(tool: ToolId) {
+  // Selecting a tool only makes it active; elements are created by drawing on
+  // the canvas (see EditorCanvas).
   store.setActiveTool(tool)
-  if (tool === 'clock' || tool === 'calendar' || tool === 'image') {
-    store.addElement(
-      makeElement(tool, { clockVariant: opts.clockVariant, calendarVariant: opts.calendarVariant }, store.pageSize),
-    )
-  }
 }
 </script>
 
@@ -109,6 +105,21 @@ function pickTool(tool: ToolId) {
         </PopoverTrigger>
         <PopoverContent side="right" class="w-48"><ImageOptions /></PopoverContent>
       </Popover>
+
+      <!-- Delete selected element -->
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <button
+            data-role="delete-element"
+            class="mt-2 flex h-9 w-9 items-center justify-center rounded text-neutral-600 hover:bg-red-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-neutral-600"
+            :disabled="!store.selectedElId"
+            @click="store.deleteElement()"
+          >
+            <Trash2 class="h-5 w-5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">Delete selected (Del)</TooltipContent>
+      </Tooltip>
     </div>
   </TooltipProvider>
 </template>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { makeElement } from './elementFactory'
+import { makeElement, makeDrawingElement } from './elementFactory'
 
 const opts = { clockVariant: 'time-date' as const, calendarVariant: 'week' as const }
 const size = { w: 800, h: 480 }
@@ -27,5 +27,29 @@ describe('makeElement', () => {
     const el = makeElement('image', opts, size)
     expect(el.type).toBe('image')
     if (el.type === 'image') expect(el.src).toBe('')
+  })
+
+  it('uses an explicit rect when one is given (draw-to-place)', () => {
+    const el = makeElement('image', opts, size, { x: 10, y: 20, w: 120, h: 90 })
+    expect(el.x).toBe(10)
+    expect(el.y).toBe(20)
+    expect(el.w).toBe(120)
+    expect(el.h).toBe(90)
+  })
+})
+
+describe('makeDrawingElement', () => {
+  it('bounds the stroke and stores points relative to the element', () => {
+    const el = makeDrawingElement([{ x: 50, y: 60 }, { x: 90, y: 110 }], 'red', 4)
+    expect(el.type).toBe('drawing')
+    // bbox is padded by the stroke size on every side
+    expect(el.x).toBe(46)
+    expect(el.y).toBe(56)
+    expect(el.w).toBe(48) // (90-50) + 2*4
+    expect(el.h).toBe(58) // (110-60) + 2*4
+    expect(el.strokes[0].colour).toBe('red')
+    expect(el.strokes[0].size).toBe(4)
+    // first point sits at (50-46, 60-56) = (4, 4) in element-local space
+    expect(el.strokes[0].points[0]).toEqual({ x: 4, y: 4 })
   })
 })

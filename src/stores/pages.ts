@@ -59,6 +59,16 @@ export const usePagesStore = defineStore('pages', {
     selectElement(id: string | null) {
       this.selectedElId = id
     },
+    deleteElement(id?: string) {
+      const targetId = id ?? this.selectedElId
+      if (!targetId) return
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      if (!page) return
+      const i = page.elements.findIndex((e) => e.id === targetId)
+      if (i === -1) return
+      page.elements.splice(i, 1)
+      if (this.selectedElId === targetId) this.selectedElId = null
+    },
     updateElement(id: string, patch: Partial<BaseEl>) {
       const page = this.pages.find((p) => p.id === this.selectedPageId)
       const el = page?.elements.find((e) => e.id === id)
