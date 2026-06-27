@@ -6,7 +6,7 @@ export interface BaseEl { id: string; type: string; x: number; y: number; w: num
 export interface ClockEl extends BaseEl { type: 'clock'; variant: 'time' | 'time-date' | 'date' }
 export interface CalendarEl extends BaseEl { type: 'calendar'; variant: 'today' | 'week'; events: CalEvent[] }
 export interface ImageEl extends BaseEl { type: 'image'; src: string }
-export interface DrawingEl extends BaseEl { type: 'drawing'; strokes: Stroke[] }
+export interface DrawingEl extends BaseEl { type: 'drawing'; natW: number; natH: number; strokes: Stroke[] }
 
 export interface CalEvent { id: string; title: string; start: string; recur?: 'none' | 'daily' | 'weekly' }
 export interface Stroke { colour: EpaperColour; size: number; points: { x: number; y: number }[] }

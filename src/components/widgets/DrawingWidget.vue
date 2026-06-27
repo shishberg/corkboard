@@ -8,7 +8,7 @@ const toPath = (points: { x: number; y: number }[]) => points.map((p) => `${p.x}
 <template>
   <svg
     data-role="drawing"
-    :viewBox="`0 0 ${el.w} ${el.h}`"
+    :viewBox="`0 0 ${el.natW} ${el.natH}`"
     class="h-full w-full overflow-visible"
     preserveAspectRatio="none"
   >

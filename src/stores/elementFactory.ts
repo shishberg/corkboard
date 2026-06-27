@@ -60,13 +60,17 @@ export function makeDrawingElement(
   const maxX = Math.max(...xs) + size
   const maxY = Math.max(...ys) + size
   const local = points.map((p) => ({ x: p.x - minX, y: p.y - minY }))
+  const w = Math.max(1, maxX - minX)
+  const h = Math.max(1, maxY - minY)
   return {
     id: uid(),
     type: 'drawing',
     x: minX,
     y: minY,
-    w: Math.max(1, maxX - minX),
-    h: Math.max(1, maxY - minY),
+    w,
+    h,
+    natW: w,
+    natH: h,
     colour,
     strokes: [{ colour, size, points: local }],
   }

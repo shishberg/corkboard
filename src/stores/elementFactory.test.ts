@@ -62,4 +62,10 @@ describe('makeDrawingElement', () => {
     const el = makeDrawingElement([{ x: 10, y: 10 }, { x: 20, y: 20 }], 'blue', 2)
     expect(el.colour).toBe('blue')
   })
+
+  it('sets natW and natH equal to w and h at creation', () => {
+    const el = makeDrawingElement([{ x: 50, y: 60 }, { x: 90, y: 110 }], 'red', 4)
+    expect(el.natW).toBe(el.w)
+    expect(el.natH).toBe(el.h)
+  })
 })

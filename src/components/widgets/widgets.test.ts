@@ -3,6 +3,8 @@ import { mount } from '@vue/test-utils'
 import ClockWidget from './ClockWidget.vue'
 import CalendarWidget from './CalendarWidget.vue'
 import ImageWidget from './ImageWidget.vue'
+import DrawingWidget from './DrawingWidget.vue'
+import { makeDrawingElement } from '@/stores/elementFactory'
 import type { ClockEl, CalendarEl, ImageEl } from '@/stores/types'
 
 describe('widgets', () => {
@@ -51,5 +53,15 @@ describe('widgets', () => {
     const el: ImageEl = { id: 'img', type: 'image', src: '', x: 0, y: 0, w: 200, h: 150, colour: 'black' }
     const w = mount(ImageWidget, { props: { el } })
     expect(w.find('[data-role="placeholder"]').exists()).toBe(true)
+  })
+
+  it('DrawingWidget viewBox uses natW/natH, not resized w/h', () => {
+    const el = makeDrawingElement([{ x: 50, y: 60 }, { x: 90, y: 110 }], 'black', 4)
+    // Simulate a resize — w and h change, natW/natH must not
+    el.w = 200
+    el.h = 300
+    const w = mount(DrawingWidget, { props: { el } })
+    const svg = w.find('[data-role="drawing"]')
+    expect(svg.attributes('viewBox')).toBe(`0 0 ${el.natW} ${el.natH}`)
   })
 })
