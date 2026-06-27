@@ -48,7 +48,8 @@ async fn put_document(
         *guard = doc;
     }
 
-    state.render_and_show()?;
+    // Re-resolve feeds because the new document may reference different feedIds.
+    state.refresh_and_render().await?;
 
     Ok(Json(json!({"ok": true})))
 }
@@ -100,7 +101,7 @@ async fn put_feeds(
 }
 
 async fn refresh(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, AppError> {
-    state.render_and_show()?;
+    state.refresh_and_render().await?;
     Ok(Json(json!({"ok": true})))
 }
 
@@ -136,6 +137,7 @@ impl<E: Into<anyhow::Error>> From<E> for AppError {
 mod tests {
     use super::*;
     use crate::{
+        calendar::CalendarData,
         display::WebPreview,
         document::Document,
         fonts::Fonts,
@@ -162,6 +164,8 @@ mod tests {
             display: preview.clone(),
             web_preview: preview,
             fonts: Arc::new(Fonts::load()),
+            calendar: Mutex::new(CalendarData::empty()),
+            displayed_signature: Mutex::new(None),
         })
     }
 
