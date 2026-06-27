@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePagesStore } from './pages'
-import type { ClockEl } from './types'
+import type { ClockEl, DrawingEl } from './types'
 
 beforeEach(() => setActivePinia(createPinia()))
 
@@ -166,5 +166,30 @@ describe('usePagesStore', () => {
     s.addElement(clockEl('e1'))
     s.setElementColour('ghost', 'blue')
     expect(s.selectedPage?.elements[0].colour).toBe('black')
+  })
+
+  it('setElementColour on a drawing element also updates each stroke colour', () => {
+    const s = usePagesStore()
+    const drawing: DrawingEl = {
+      id: 'd1',
+      type: 'drawing',
+      x: 0,
+      y: 0,
+      w: 100,
+      h: 100,
+      natW: 100,
+      natH: 100,
+      colour: 'black',
+      strokes: [
+        { colour: 'black', size: 4, points: [{ x: 10, y: 10 }] },
+        { colour: 'black', size: 4, points: [{ x: 20, y: 20 }] },
+      ],
+    }
+    s.addElement(drawing)
+    s.setElementColour('d1', 'red')
+    const el = s.selectedPage?.elements[0] as DrawingEl
+    expect(el.colour).toBe('red')
+    expect(el.strokes[0].colour).toBe('red')
+    expect(el.strokes[1].colour).toBe('red')
   })
 })

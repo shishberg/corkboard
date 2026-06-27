@@ -26,7 +26,7 @@ function stopStroke() {
 }
 function onUp() {
   stopStroke()
-  if (points.value.length > 1) emit('stroke', points.value.slice())
+  if (points.value.length > 0) emit('stroke', points.value.slice())
   points.value = []
 }
 function onDown(e: PointerEvent) {

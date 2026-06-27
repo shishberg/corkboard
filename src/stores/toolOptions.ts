@@ -20,7 +20,11 @@ const defaults: ToolOptionsState = {
 function load(): ToolOptionsState {
   try {
     const raw = localStorage.getItem(KEY)
-    return raw ? { ...defaults, ...JSON.parse(raw) } : { ...defaults }
+    if (!raw) return { ...defaults }
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    // Migrate legacy key: drawColour → colour
+    const colour = (parsed.colour ?? parsed.drawColour ?? defaults.colour) as ToolOptionsState['colour']
+    return { ...defaults, ...parsed, colour }
   } catch {
     return { ...defaults }
   }

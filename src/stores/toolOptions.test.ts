@@ -29,4 +29,18 @@ describe('useToolOptionsStore', () => {
     const s = useToolOptionsStore()
     expect(s.penSize).toBe(12)
   })
+
+  it('migrates legacy drawColour key to colour on load', () => {
+    localStorage.setItem('corkboard.toolOptions', JSON.stringify({ drawColour: 'red' }))
+    setActivePinia(createPinia())
+    const s = useToolOptionsStore()
+    expect(s.colour).toBe('red')
+  })
+
+  it('colour takes precedence over drawColour when both are present', () => {
+    localStorage.setItem('corkboard.toolOptions', JSON.stringify({ colour: 'blue', drawColour: 'red' }))
+    setActivePinia(createPinia())
+    const s = useToolOptionsStore()
+    expect(s.colour).toBe('blue')
+  })
 })

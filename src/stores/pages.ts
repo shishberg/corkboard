@@ -103,7 +103,11 @@ export const usePagesStore = defineStore('pages', {
     setElementColour(id: string, colour: EpaperColour) {
       const page = this.pages.find((p) => p.id === this.selectedPageId)
       const el = page?.elements.find((e) => e.id === id)
-      if (el) el.colour = colour
+      if (!el) return
+      el.colour = colour
+      if (el.type === 'drawing') {
+        for (const stroke of el.strokes) stroke.colour = colour
+      }
     },
   },
 })

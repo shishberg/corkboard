@@ -7,7 +7,7 @@ export interface Point {
 
 /** Convert a pressure-free point array to a filled SVG path `d` string using perfect-freehand. */
 export function strokeToPath(points: Point[], size: number): string {
-  if (points.length < 2) return ''
+  if (points.length < 1) return ''
 
   const outline = getStroke(
     points.map((p) => [p.x, p.y]),

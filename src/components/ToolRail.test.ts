@@ -93,10 +93,7 @@ describe('ToolRail', () => {
   it('panel highlights opts.colour when no element is selected', async () => {
     const opts = useToolOptionsStore()
     opts.colour = 'yellow'
-    store: {
-      const store = usePagesStore()
-      store.selectedElId // no selection
-    }
+    expect(usePagesStore().selectedElId).toBe(null)
     const w = mount(ToolRail)
     await nextTick()
     const yellowSwatch = w.get('[data-colour="yellow"]')

@@ -92,6 +92,7 @@ function onSurfacePointerDown(e: PointerEvent) {
     creatingId = el.id
     window.addEventListener('pointermove', onCreateMove)
     window.addEventListener('pointerup', onCreateUp)
+    window.addEventListener('pointercancel', onCreateUp)
   } else {
     clearSelection()
   }
@@ -99,6 +100,7 @@ function onSurfacePointerDown(e: PointerEvent) {
 function stopCreateDrag() {
   window.removeEventListener('pointermove', onCreateMove)
   window.removeEventListener('pointerup', onCreateUp)
+  window.removeEventListener('pointercancel', onCreateUp)
 }
 function onCreateMove(e: PointerEvent) {
   if (!creatingId) return
@@ -115,7 +117,7 @@ function onCreateUp(e: PointerEvent) {
   const id = creatingId
   creatingId = null
   if (!id) return
-  // A click (movement under slop) sets a default size centred on the click point
+  // A click (movement under slop) sets a default size with top-left at the click point
   const moved = Math.hypot(e.clientX - createStartRaw.x, e.clientY - createStartRaw.y)
   if (moved < CLICK_SLOP) {
     const def = defaultSize(createTool)
@@ -127,6 +129,7 @@ function onCreateUp(e: PointerEvent) {
 
 // --- Pen: turn a finished stroke into a drawing element ---
 function onStroke(points: { x: number; y: number }[]) {
+  if (points.length === 0) return
   store.addElement(makeDrawingElement(points, opts.colour, opts.penSize))
 }
 </script>

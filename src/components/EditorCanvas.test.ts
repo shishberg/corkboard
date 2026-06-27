@@ -99,6 +99,22 @@ describe('EditorCanvas', () => {
     w.unmount()
   })
 
+  it('pen tap (pointerdown then pointerup, no move) creates a drawing dot', async () => {
+    const store = usePagesStore()
+    store.setActiveTool('draw')
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+    const layer = w.get('[data-role="draw-layer"]').element
+    layer.dispatchEvent(winPointer('pointerdown', 50, 50))
+    // No pointermove — just a tap
+    window.dispatchEvent(winPointer('pointerup', 50, 50))
+    await nextTick()
+    const els = store.selectedPage?.elements ?? []
+    expect(els.length).toBe(1)
+    expect(els[0].type).toBe('drawing')
+    w.unmount()
+  })
+
   it('clears selection when the empty surface is clicked', async () => {
     const store = usePagesStore()
     store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
@@ -170,6 +186,54 @@ describe('EditorCanvas', () => {
     expect(els.length).toBe(2)
     // The selected element is the newly created one (not 'e1')
     expect(store.selectedElId).not.toBe('e1')
+    w.unmount()
+  })
+
+  it('creation tool: movable has pointer-events:none; select tool: movable has no pointer-events restriction', async () => {
+    const store = usePagesStore()
+    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 50, y: 50, w: 200, h: 80, colour: 'black' as const })
+
+    // With a creation tool active
+    store.setActiveTool('clock')
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+    const movable = w.get('[data-role="movable"]')
+    expect((movable.element as HTMLElement).style.pointerEvents).toBe('none')
+
+    // Switch to select tool
+    store.setActiveTool('select')
+    await nextTick()
+    expect((movable.element as HTMLElement).style.pointerEvents).not.toBe('none')
+
+    w.unmount()
+  })
+
+  it('pointercancel during live creation finalises the element without leaking listeners', async () => {
+    const store = usePagesStore()
+    store.setActiveTool('clock')
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+
+    w.get('[data-role="surface"]').element.dispatchEvent(winPointer('pointerdown', 10, 20))
+    await nextTick()
+    // One element added during pointerdown
+    expect(store.selectedPage?.elements.length).toBe(1)
+
+    // Cancel the gesture — should finalise just like pointerup
+    window.dispatchEvent(winPointer('pointercancel', 10, 20))
+    await nextTick()
+    // Element still exists (not removed), tool switches to select
+    expect(store.selectedPage?.elements.length).toBe(1)
+    expect(store.activeTool).toBe('select')
+
+    // Further pointermove should have no effect (listeners cleaned up)
+    const before = { ...store.selectedPage!.elements[0] }
+    window.dispatchEvent(winPointer('pointermove', 200, 300))
+    await nextTick()
+    const after = store.selectedPage!.elements[0]
+    expect(after.x).toBe(before.x)
+    expect(after.y).toBe(before.y)
+
     w.unmount()
   })
 })
