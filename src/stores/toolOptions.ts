@@ -4,14 +4,12 @@ import type { EpaperColour } from './types'
 const KEY = 'corkboard.toolOptions'
 
 interface ToolOptionsState {
-  clockVariant: 'time' | 'time-date' | 'date'
   calendarVariant: 'today' | 'week'
   colour: EpaperColour
   penSize: number
 }
 
 const defaults: ToolOptionsState = {
-  clockVariant: 'time',
   calendarVariant: 'today',
   colour: 'black',
   penSize: 4,

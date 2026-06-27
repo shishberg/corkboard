@@ -4,7 +4,6 @@ let counter = 0
 const uid = () => `el-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
 interface FactoryOpts {
-  clockVariant: 'time' | 'time-date' | 'date'
   calendarVariant: 'today' | 'week'
   colour: EpaperColour
 }
@@ -17,17 +16,16 @@ interface Rect {
 }
 
 const SIZES = {
-  clock: { w: 240, h: 90 },
   calendar: { w: 300, h: 220 },
   image: { w: 200, h: 150 },
 }
 
-export function defaultSize(tool: 'clock' | 'calendar' | 'image'): { w: number; h: number } {
+export function defaultSize(tool: 'calendar' | 'image'): { w: number; h: number } {
   return { ...SIZES[tool] }
 }
 
 export function makeElement(
-  tool: 'clock' | 'calendar' | 'image',
+  tool: 'calendar' | 'image',
   opts: FactoryOpts,
   pageSize: { w: number; h: number },
   rect?: Rect,
@@ -36,8 +34,6 @@ export function makeElement(
   const geom: Rect = rect ?? { w, h, x: (pageSize.w - w) / 2, y: (pageSize.h - h) / 2 }
   const base = { id: uid(), ...geom, colour: opts.colour }
   switch (tool) {
-    case 'clock':
-      return { ...base, type: 'clock', variant: opts.clockVariant }
     case 'calendar':
       return { ...base, type: 'calendar', variant: opts.calendarVariant, events: [] }
     case 'image':

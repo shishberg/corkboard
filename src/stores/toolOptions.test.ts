@@ -10,7 +10,6 @@ beforeEach(() => {
 describe('useToolOptionsStore', () => {
   it('has sensible defaults', () => {
     const s = useToolOptionsStore()
-    expect(s.clockVariant).toBe('time')
     expect(s.calendarVariant).toBe('today')
     expect(s.colour).toBe('black')
     expect(s.penSize).toBe(4)
