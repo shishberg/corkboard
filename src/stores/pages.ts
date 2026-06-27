@@ -14,7 +14,7 @@ export const usePagesStore = defineStore('pages', {
     return {
       orientation: 'landscape',
       pages: [first],
-      timeline: [],
+      livePageId: first.id,
       selectedPageId: first.id,
       selectedElId: null,
       activeTool: 'select',
@@ -24,6 +24,9 @@ export const usePagesStore = defineStore('pages', {
   getters: {
     selectedPage(state): Page | null {
       return state.pages.find((p) => p.id === state.selectedPageId) ?? null
+    },
+    livePage(state): Page | null {
+      return state.pages.find((p) => p.id === state.livePageId) ?? null
     },
     pageSize(state): { w: number; h: number } {
       return state.orientation === 'landscape' ? { w: 800, h: 480 } : { w: 480, h: 800 }
@@ -80,25 +83,9 @@ export const usePagesStore = defineStore('pages', {
         if (h !== undefined) el.h = h
       }
     },
-    addToTimeline(pageId: string) {
-      if (!this.pages.some((p) => p.id === pageId)) return
-      this.timeline.push({ pageId, delayMs: 5000 })
-    },
-    reorderTimeline(from: number, to: number) {
-      if (from === to) return
-      const len = this.timeline.length
-      if (!Number.isInteger(from) || from < 0 || from >= len) return
-      if (!Number.isInteger(to) || to < 0 || to >= len) return
-      const [moved] = this.timeline.splice(from, 1)
-      this.timeline.splice(to, 0, moved)
-    },
-    setTimelineDelay(index: number, delayMs: number) {
-      const entry = this.timeline[index]
-      if (entry) entry.delayMs = delayMs
-    },
-    removeFromTimeline(index: number) {
-      if (!Number.isInteger(index) || index < 0 || index >= this.timeline.length) return
-      this.timeline.splice(index, 1)
+    setLivePage(id: string) {
+      if (!this.pages.some((p) => p.id === id)) return
+      this.livePageId = id
     },
     setElementColour(id: string, colour: EpaperColour) {
       const page = this.pages.find((p) => p.id === this.selectedPageId)

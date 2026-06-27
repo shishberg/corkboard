@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePagesStore } from './pages'
-import type { ClockEl, DrawingEl } from './types'
+import type { ImageEl, DrawingEl } from './types'
 
 beforeEach(() => setActivePinia(createPinia()))
 
-function clockEl(id: string): ClockEl {
-  return { id, type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' }
+function imageEl(id: string): ImageEl {
+  return { id, type: 'image', x: 0, y: 0, w: 200, h: 150, colour: 'black', src: '' }
 }
 
 describe('usePagesStore', () => {
@@ -34,14 +34,14 @@ describe('usePagesStore', () => {
 
   it('addElement pushes onto the selected page and selects it', () => {
     const s = usePagesStore()
-    s.addElement(clockEl('e1'))
+    s.addElement(imageEl('e1'))
     expect(s.selectedPage?.elements.length).toBe(1)
     expect(s.selectedElId).toBe('e1')
   })
 
   it('deleteElement removes the selected element and clears selection', () => {
     const s = usePagesStore()
-    s.addElement(clockEl('e1'))
+    s.addElement(imageEl('e1'))
     expect(s.selectedElId).toBe('e1')
     s.deleteElement()
     expect(s.selectedPage?.elements.length).toBe(0)
@@ -50,8 +50,8 @@ describe('usePagesStore', () => {
 
   it('deleteElement(id) removes a specific element', () => {
     const s = usePagesStore()
-    s.addElement(clockEl('e1'))
-    s.addElement(clockEl('e2'))
+    s.addElement(imageEl('e1'))
+    s.addElement(imageEl('e2'))
     s.deleteElement('e1')
     expect(s.selectedPage?.elements.map((e) => e.id)).toEqual(['e2'])
     // e2 was the selection; deleting e1 leaves it intact
@@ -60,79 +60,37 @@ describe('usePagesStore', () => {
 
   it('updateElement patches geometry', () => {
     const s = usePagesStore()
-    s.addElement(clockEl('e1'))
+    s.addElement(imageEl('e1'))
     s.updateElement('e1', { x: 50, y: 60 })
     const el = s.selectedPage?.elements[0]
     expect(el?.x).toBe(50)
     expect(el?.y).toBe(60)
   })
 
-  it('addToTimeline appends with a default delay', () => {
+  it('starts with the first page live', () => {
     const s = usePagesStore()
-    const pid = s.pages[0].id
-    s.addToTimeline(pid)
-    expect(s.timeline).toEqual([{ pageId: pid, delayMs: 5000 }])
+    expect(s.livePageId).toBe(s.pages[0].id)
+    expect(s.livePage?.id).toBe(s.pages[0].id)
   })
 
-  it('reorderTimeline moves an entry', () => {
+  it('setLivePage changes which page is live', () => {
     const s = usePagesStore()
-    const a = s.pages[0].id
     const b = s.addPage()
-    s.addToTimeline(a)
-    s.addToTimeline(b)
-    s.reorderTimeline(0, 1)
-    expect(s.timeline.map((t) => t.pageId)).toEqual([b, a])
+    s.setLivePage(b)
+    expect(s.livePageId).toBe(b)
   })
 
-  it('setTimelineDelay updates one entry', () => {
+  it('setLivePage ignores an unknown id', () => {
     const s = usePagesStore()
-    s.addToTimeline(s.pages[0].id)
-    s.setTimelineDelay(0, 12000)
-    expect(s.timeline[0].delayMs).toBe(12000)
-  })
-
-  // Guard tests (review findings)
-
-  it('reorderTimeline: ignores negative from index', () => {
-    const s = usePagesStore()
-    const a = s.pages[0].id
-    const b = s.addPage()
-    s.addToTimeline(a)
-    s.addToTimeline(b)
-    const before = s.timeline.map((t) => t.pageId)
-    s.reorderTimeline(-1, 0)
-    expect(s.timeline.map((t) => t.pageId)).toEqual(before)
-  })
-
-  it('reorderTimeline: ignores out-of-range to index', () => {
-    const s = usePagesStore()
-    const a = s.pages[0].id
-    const b = s.addPage()
-    s.addToTimeline(a)
-    s.addToTimeline(b)
-    const before = s.timeline.map((t) => t.pageId)
-    s.reorderTimeline(0, 99)
-    expect(s.timeline.map((t) => t.pageId)).toEqual(before)
-  })
-
-  it('reorderTimeline: same-index is a no-op', () => {
-    const s = usePagesStore()
-    s.addToTimeline(s.pages[0].id)
-    const before = [...s.timeline]
-    s.reorderTimeline(0, 0)
-    expect(s.timeline).toEqual(before)
-  })
-
-  it('addToTimeline: ignores unknown pageId', () => {
-    const s = usePagesStore()
-    s.addToTimeline('does-not-exist')
-    expect(s.timeline.length).toBe(0)
+    const before = s.livePageId
+    s.setLivePage('ghost')
+    expect(s.livePageId).toBe(before)
   })
 
   it('selectPage: ignores unknown id, leaves selection unchanged', () => {
     const s = usePagesStore()
     const originalId = s.selectedPageId
-    s.addElement(clockEl('e1'))
+    s.addElement(imageEl('e1'))
     s.selectPage('ghost-id')
     expect(s.selectedPageId).toBe(originalId)
     expect(s.selectedElId).toBe('e1')
@@ -140,30 +98,23 @@ describe('usePagesStore', () => {
 
   it('updateElement: patch cannot change id or type', () => {
     const s = usePagesStore()
-    s.addElement(clockEl('e1'))
+    s.addElement(imageEl('e1'))
     s.updateElement('e1', { id: 'hacked', type: 'calendar' } as Partial<import('./types').BaseEl>)
     const el = s.selectedPage?.elements[0]
     expect(el?.id).toBe('e1')
-    expect(el?.type).toBe('clock')
-  })
-
-  it('removeFromTimeline: ignores negative index', () => {
-    const s = usePagesStore()
-    s.addToTimeline(s.pages[0].id)
-    s.removeFromTimeline(-1)
-    expect(s.timeline.length).toBe(1)
+    expect(el?.type).toBe('image')
   })
 
   it('setElementColour sets the colour on an element', () => {
     const s = usePagesStore()
-    s.addElement(clockEl('e1'))
+    s.addElement(imageEl('e1'))
     s.setElementColour('e1', 'red')
     expect(s.selectedPage?.elements[0].colour).toBe('red')
   })
 
   it('setElementColour is a no-op for an unknown id', () => {
     const s = usePagesStore()
-    s.addElement(clockEl('e1'))
+    s.addElement(imageEl('e1'))
     s.setElementColour('ghost', 'blue')
     expect(s.selectedPage?.elements[0].colour).toBe('black')
   })
