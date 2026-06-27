@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 .serena/
 device/target/
+
+# Playwright
+test-results/
+playwright-report/
