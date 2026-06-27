@@ -99,9 +99,9 @@ fn parse_dtstart_value(val: &str) -> Option<((i32, u32, u32), Option<String>)> {
     if val.len() < 8 {
         return None;
     }
-    let year: i32 = val[..4].parse().ok()?;
-    let month: u32 = val[4..6].parse().ok()?;
-    let day: u32 = val[6..8].parse().ok()?;
+    let year: i32 = val.get(..4)?.parse().ok()?;
+    let month: u32 = val.get(4..6)?.parse().ok()?;
+    let day: u32 = val.get(6..8)?.parse().ok()?;
 
     // A "T" at position 8 signals a date-time value.
     let time = if val.len() >= 13 && val.as_bytes().get(8) == Some(&b'T') {
@@ -220,13 +220,17 @@ pub fn resolve(events: &[VEvent], today: (i32, u32, u32)) -> ResolvedFeed {
     }
 }
 
-/// Deterministic semantic fingerprint of the resolved feeds map.
+/// Deterministic semantic fingerprint of the resolved calendar data.
 ///
-/// Same content → same string.  Any event add/remove/edit, or different feeds
-/// present → different string.  Uses BTreeMap iteration order (sorted by key)
-/// so the output is reproducible.
-pub fn signature(feeds: &BTreeMap<String, ResolvedFeed>) -> String {
+/// Incorporates both `today` and the resolved feeds map so a date rollover
+/// (same event bytes, different day) produces a different signature.
+///
+/// Same content → same string.  Any event add/remove/edit, different feeds
+/// present, or different `today` → different string.  Uses BTreeMap iteration
+/// order (sorted by key) so the output is reproducible.
+pub fn signature(today: (i32, u32, u32), feeds: &BTreeMap<String, ResolvedFeed>) -> String {
     let mut parts: Vec<String> = Vec::new();
+    parts.push(format!("today:{:?}|", today));
     for (feed_id, feed) in feeds {
         parts.push(format!("feed:{}", feed_id));
         parts.push("today:".to_string());
@@ -482,7 +486,7 @@ mod tests {
     fn signature_same_content_produces_equal_strings() {
         let map1 = make_feed_map("f1", &fixture_events());
         let map2 = make_feed_map("f1", &fixture_events());
-        assert_eq!(signature(&map1), signature(&map2));
+        assert_eq!(signature(TODAY, &map1), signature(TODAY, &map2));
     }
 
     #[test]
@@ -493,7 +497,7 @@ mod tests {
         events[0].summary = "CHANGED TITLE".to_string();
         let map2 = make_feed_map("f1", &events);
 
-        assert_ne!(signature(&map1), signature(&map2));
+        assert_ne!(signature(TODAY, &map1), signature(TODAY, &map2));
     }
 
     #[test]
@@ -508,13 +512,64 @@ mod tests {
         });
         let map2 = make_feed_map("f1", &events);
 
-        assert_ne!(signature(&map1), signature(&map2));
+        assert_ne!(signature(TODAY, &map1), signature(TODAY, &map2));
     }
 
     #[test]
     fn signature_empty_map_is_stable() {
         let empty: BTreeMap<String, ResolvedFeed> = BTreeMap::new();
-        assert_eq!(signature(&empty), signature(&empty));
+        assert_eq!(signature(TODAY, &empty), signature(TODAY, &empty));
+    }
+
+    // ── I1: UTF-8-safe DTSTART parsing ───────────────────────────────────────
+
+    #[test]
+    fn parse_dtstart_value_non_ascii_returns_none_not_panic() {
+        // "€" is 3 UTF-8 bytes (e2 82 ac).  "2026062€xx" byte-length is > 8
+        // but slicing val[4..6] would straddle the euro-sign — must not panic.
+        assert!(parse_dtstart_value("2026062\u{20AC}xx").is_none());
+        // Also verify on a plain multi-byte char in the year field
+        assert!(parse_dtstart_value("\u{20AC}2060628").is_none());
+        // Short values still rejected
+        assert!(parse_dtstart_value("202606").is_none());
+        assert!(parse_dtstart_value("").is_none());
+    }
+
+    #[test]
+    fn parse_ics_with_non_ascii_dtstart_skips_event_without_panic() {
+        // Build an ICS with a DTSTART containing a multi-byte UTF-8 char.
+        let ics = concat!(
+            "BEGIN:VCALENDAR\r\n",
+            "BEGIN:VEVENT\r\n",
+            "DTSTART:2026062\u{20AC}xx\r\n",
+            "SUMMARY:Bad date event\r\n",
+            "END:VEVENT\r\n",
+            "END:VCALENDAR\r\n"
+        );
+        // Must not panic; the event is skipped (unparseable DTSTART).
+        let events = parse_ics(ics);
+        assert!(events.is_empty());
+    }
+
+    // ── I2: today folded into signature ──────────────────────────────────────
+
+    #[test]
+    fn signature_different_today_produces_different_string() {
+        let map = make_feed_map("f1", &fixture_events());
+        let today1: (i32, u32, u32) = (2026, 6, 27);
+        let today2: (i32, u32, u32) = (2026, 6, 28);
+        assert_ne!(
+            signature(today1, &map),
+            signature(today2, &map),
+            "different today must yield different signature even with identical feeds"
+        );
+    }
+
+    #[test]
+    fn signature_same_today_and_feeds_produces_equal_string() {
+        let map1 = make_feed_map("f1", &fixture_events());
+        let map2 = make_feed_map("f1", &fixture_events());
+        assert_eq!(signature(TODAY, &map1), signature(TODAY, &map2));
     }
 
     // ── CalendarData ──────────────────────────────────────────────────────────

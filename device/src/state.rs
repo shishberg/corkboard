@@ -123,7 +123,7 @@ impl AppState {
     /// Called by `POST /api/refresh` and `PUT /api/document`.
     pub async fn refresh_and_render(&self) -> anyhow::Result<()> {
         let data = self.resolve_calendar().await;
-        let sig = calendar::signature(&data.feeds);
+        let sig = calendar::signature(data.today, &data.feeds);
 
         *self.calendar.lock().unwrap() = data;
         *self.displayed_signature.lock().unwrap() = Some(sig);
@@ -139,7 +139,7 @@ impl AppState {
     /// `resolve_calendar`.
     pub async fn poll_once(&self) -> anyhow::Result<bool> {
         let data = self.resolve_calendar().await;
-        let new_sig = calendar::signature(&data.feeds);
+        let new_sig = calendar::signature(data.today, &data.feeds);
 
         let changed = {
             let guard = self.displayed_signature.lock().unwrap();

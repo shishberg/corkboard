@@ -63,16 +63,33 @@ async fn post_image(
     Ok(Json(json!({"id": id})))
 }
 
+/// Validate an image id: must be non-empty and contain only ASCII
+/// alphanumerics or `-`.  Server-generated ids are `img-<uuid>` and always
+/// pass.  Rejects any value that could be used for path traversal (`.`, `/`,
+/// `\`, `..`, percent-decoded traversal sequences, etc.).
+fn valid_image_id(id: &str) -> bool {
+    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
 async fn get_image(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Response {
+    // C1: reject any id that doesn't match the safe subset before touching the FS.
+    if !valid_image_id(&id) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     match state.storage.load_image(&id) {
         Some(bytes) => {
+            // M1: sniff format from magic bytes; fall back to octet-stream.
+            let content_type: &'static str = image::guess_format(&bytes)
+                .ok()
+                .map(|fmt| fmt.to_mime_type())
+                .unwrap_or("application/octet-stream");
             let mut response = bytes.into_response();
             response
                 .headers_mut()
-                .insert("content-type", HeaderValue::from_static("application/octet-stream"));
+                .insert("content-type", HeaderValue::from_static(content_type));
             response
         }
         None => StatusCode::NOT_FOUND.into_response(),
@@ -304,6 +321,82 @@ mod tests {
 
         let resp = make_router(state).oneshot(get_req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    // C1: path-traversal ids must be rejected with 4xx before any FS access.
+    #[tokio::test]
+    async fn get_image_path_traversal_rejected() {
+        let state = make_state();
+
+        // These are percent-encoded traversal sequences; Axum decodes the path
+        // param so id would become "../../etc/passwd", "../", etc.
+        let bad_uris = [
+            // %2F is decoded to '/' inside the id param
+            "/api/images/..%2F..%2Fetc%2Fpasswd",
+            // plain dot-dot with encoded slash
+            "/api/images/..%2F",
+        ];
+
+        for uri in bad_uris {
+            let req = Request::builder()
+                .method("GET")
+                .uri(uri)
+                .body(axum::body::Body::empty())
+                .unwrap();
+
+            let resp = make_router(state.clone()).oneshot(req).await.unwrap();
+            assert!(
+                resp.status().is_client_error(),
+                "expected 4xx for URI {uri}, got {}",
+                resp.status()
+            );
+        }
+
+        // Also verify the validator directly for ids that can't be expressed
+        // as a single URI segment (contain literal '/').
+        assert!(!valid_image_id("../../etc/passwd"));
+        assert!(!valid_image_id("../"));
+        assert!(!valid_image_id(".."));
+        assert!(!valid_image_id("."));
+        assert!(!valid_image_id("img/traversal"));
+        assert!(!valid_image_id(r"img\traversal"));
+        assert!(!valid_image_id(""));
+        // Valid ids must still pass
+        assert!(valid_image_id("img-abc123"));
+        assert!(valid_image_id("img-a1b2c3d4-e5f6-7890-abcd-ef1234567890"));
+    }
+
+    // M1: image content-type is inferred from magic bytes.
+    #[tokio::test]
+    async fn get_image_content_type_sniffed() {
+        let state = make_state();
+
+        // PNG magic bytes (first 8 bytes of any PNG file).
+        let png_magic: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
+
+        let post_req = Request::builder()
+            .method("POST")
+            .uri("/api/images")
+            .header("content-type", "application/octet-stream")
+            .body(axum::body::Body::from(png_magic))
+            .unwrap();
+
+        let resp = make_router(state.clone()).oneshot(post_req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let result: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let id = result["id"].as_str().unwrap().to_string();
+
+        let get_req = Request::builder()
+            .method("GET")
+            .uri(format!("/api/images/{}", id))
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let resp = make_router(state.clone()).oneshot(get_req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        assert_eq!(ct, "image/png");
     }
 
     #[tokio::test]

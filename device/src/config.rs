@@ -45,8 +45,20 @@ impl Config {
         if !path.exists() {
             return Self::default();
         }
-        let data = std::fs::read_to_string(path).unwrap_or_default();
-        serde_json::from_str(&data).unwrap_or_else(|_| Self::default())
+        let data = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(_) => {
+                tracing::warn!("config.json could not be read; using defaults");
+                return Self::default();
+            }
+        };
+        match serde_json::from_str(&data) {
+            Ok(cfg) => cfg,
+            Err(_) => {
+                tracing::warn!("config.json failed to parse; using defaults");
+                Self::default()
+            }
+        }
     }
 
     pub fn save(&self, path: &std::path::Path) -> anyhow::Result<()> {
@@ -119,5 +131,18 @@ mod tests {
         let cfg = Config::load(&path);
         assert_eq!(cfg.feeds.len(), 0);
         assert_eq!(cfg.poll_interval_minutes, 60);
+    }
+
+    // M3: corrupt config silently resets (now with warn, no panic, no URL leak)
+    #[test]
+    fn load_corrupt_config_returns_default_without_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, b"{ this is not valid json !!").unwrap();
+        let cfg = Config::load(&path);
+        // Must return defaults, not panic
+        assert_eq!(cfg.feeds.len(), 0);
+        assert_eq!(cfg.poll_interval_minutes, 60);
+        assert_eq!(cfg.hostname, "corkboard.local");
     }
 }
