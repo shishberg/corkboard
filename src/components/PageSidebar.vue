@@ -12,10 +12,10 @@ const store = usePagesStore()
       v-for="p in store.pages"
       :key="p.id"
       data-role="thumb"
-      class="cursor-pointer rounded p-0.5"
+      class="cursor-pointer rounded border-2 p-0.5"
       :class="[
         store.selectedPageId === p.id ? 'ring-2 ring-blue-500' : '',
-        store.livePageId === p.id ? 'ring-2 ring-green-500' : '',
+        store.livePageId === p.id ? 'border-green-500' : 'border-transparent',
       ]"
       @click="store.selectPage(p.id)"
     >

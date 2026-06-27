@@ -13,6 +13,13 @@ onMounted(() => {
   fonts.load()
 })
 
+// Fall back to the manifest's default font if the stored font is not loaded.
+// This avoids a blank <select> when a custom manifest doesn't include the
+// previously saved font id.
+const effectiveFont = computed(() =>
+  fonts.fonts.some((f) => f.id === opts.font) ? opts.font : fonts.defaultId,
+)
+
 const selectedTextEl = computed((): TextEl | null => {
   const id = store.selectedElId
   if (!id) return null
@@ -41,7 +48,7 @@ function pickAlign(align: 'left' | 'center') {
     <select
       data-role="font-select"
       class="rounded border px-1 py-1 text-sm"
-      :value="opts.font"
+      :value="effectiveFont"
       @change="pickFont(($event.target as HTMLSelectElement).value)"
     >
       <option v-for="font in fonts.fonts" :key="font.id" :value="font.id">{{ font.name }}</option>

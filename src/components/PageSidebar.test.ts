@@ -64,4 +64,17 @@ describe('PageSidebar', () => {
     const w = mount(PageSidebar)
     expect(w.find('[data-role="delete-page"]').exists()).toBe(false)
   })
+
+  it('a page that is both selected and live shows both the blue ring and the green border', () => {
+    // Default state: pages[0] is both selected AND live — no addPage() needed.
+    // addPage() would move selectedPageId to the new page and break the test.
+    const w = mount(PageSidebar)
+    const firstThumb = w.findAll('[data-role="thumb"]')[0]
+    const classes = firstThumb.classes()
+    // Selection indicator: blue ring
+    expect(classes).toContain('ring-2')
+    expect(classes).toContain('ring-blue-500')
+    // Live indicator: green border (independent of ring)
+    expect(classes).toContain('border-green-500')
+  })
 })

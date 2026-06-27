@@ -8,7 +8,6 @@ export interface ImageEl extends BaseEl { type: 'image'; src: string }
 export interface DrawingEl extends BaseEl { type: 'drawing'; natW: number; natH: number; strokes: Stroke[] }
 export interface TextEl extends BaseEl { type: 'text'; text: string; font: string; align: 'left' | 'center' }
 
-export interface CalEvent { id: string; title: string; start: string; recur?: 'none' | 'daily' | 'weekly' }
 export interface Stroke { colour: EpaperColour; size: number; points: { x: number; y: number }[] }
 
 export type El = CalendarEl | ImageEl | DrawingEl | TextEl

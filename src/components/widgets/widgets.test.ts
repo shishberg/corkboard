@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { nextTick, reactive } from 'vue'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePagesStore } from '@/stores/pages'
@@ -72,6 +73,16 @@ describe('widgets', () => {
 })
 
 describe('TextWidget', () => {
+  // Tracks a cleanup function to restore document.activeElement after stubs.
+  let cleanupActiveElement: (() => void) | null = null
+
+  afterEach(() => {
+    if (cleanupActiveElement) {
+      cleanupActiveElement()
+      cleanupActiveElement = null
+    }
+  })
+
   const sampleEl: TextEl = {
     id: 'text1',
     type: 'text',
@@ -157,5 +168,59 @@ describe('TextWidget', () => {
 
     const el = store.selectedPage?.elements[0]
     expect(el?.type === 'text' && (el as TextEl).text).toBe('New text')
+  })
+
+  // --- caret-safe contenteditable regression tests ---
+
+  it('node textContent is set imperatively on mount (no reactive interpolation)', () => {
+    // Use a fresh copy: sampleEl can be mutated by earlier tests that add it to the store
+    const freshEl: TextEl = { ...sampleEl, text: 'Hello world' }
+    const w = mount(TextWidget, { props: { el: freshEl } })
+    const node = w.find('[data-role="text-edit"]').element
+    expect(node.textContent).toBe('Hello world')
+  })
+
+  it('watcher does NOT overwrite node content while the node has focus', async () => {
+    const store = usePagesStore()
+    store.selectedElId = sampleEl.id
+    store.activeTool = 'select'
+
+    const reactiveEl = reactive({ ...sampleEl })
+    const w = mount(TextWidget, { props: { el: reactiveEl } })
+    const node = w.find('[data-role="text-edit"]').element as HTMLElement
+
+    // Stub document.activeElement to look like this node is focused
+    Object.defineProperty(document, 'activeElement', {
+      get: () => node,
+      configurable: true,
+    })
+    cleanupActiveElement = () => {
+      // Remove the own-property stub so the prototype getter takes over again
+      Reflect.deleteProperty(document, 'activeElement')
+    }
+
+    // Simulate what the browser does when the user types (sets DOM directly)
+    node.textContent = 'user typed this'
+
+    // An external el.text change arrives (e.g. undo or collaboration)
+    reactiveEl.text = 'external update'
+    await nextTick()
+
+    // Watcher must have skipped — the user's in-progress edit is intact
+    expect(node.textContent).toBe('user typed this')
+  })
+
+  it('watcher DOES update node content when el.text changes and node is not focused', async () => {
+    const reactiveEl = reactive({ ...sampleEl })
+    const w = mount(TextWidget, { props: { el: reactiveEl } })
+    const node = w.find('[data-role="text-edit"]').element as HTMLElement
+
+    // No focus stub — jsdom's document.activeElement defaults to document.body,
+    // which is not this node, so the watcher should proceed.
+
+    reactiveEl.text = 'external update'
+    await nextTick()
+
+    expect(node.textContent).toBe('external update')
   })
 })
