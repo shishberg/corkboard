@@ -40,17 +40,32 @@ The **web UI editor is fully migrated to the round-two model and working** (no d
 - Pen uses **perfect-freehand** (`src/lib/freehand.ts` `strokeToPath`): strokes render as filled SVG ink paths (live preview + committed + thumbnail). Raw input points are stored element-local with `natW`/`natH`, so resizing scales the stroke and a tap leaves a dot. Drawings show in page thumbnails.
 - 137 tests pass (`npm test`); `npm run build` clean. Editor is fully on the round-two model (calendar feed-ref, text+fonts, livePageId/make-live).
 
-**Designed but not yet built — the device server (round two, 2026-06-27).**
-The full design is `docs/specs/2026-06-27-device-server-design.md`; the durable decisions are
-in `context/decisions.md`, the wire contract in `context/protocol.md`, the panel in
-`context/hardware.md`. In short: a **Rust + axum** device server is the single source of
-truth; it serves the editor, the API, and a `preview.png`; renders the live page to the
-panel (behind a `Display` trait, with a `WebPreview` stand-in until hardware arrives); two
-renderers (editor = rough design surface, device = authoritative, "no glaring differences").
-Not started in code.
+**BUILT — the device server (Rust + axum) at `device/`.** Single source of truth: stores the
+whole document + images + config as plain files; serves the built editor + the JSON API +
+`preview.png` on one origin (LAN, no auth); renders the live page to an 800×480 six-colour PNG
+behind a `Display` trait (`WebPreview` impl serves `preview.png`; the `Panel` SPI driver is the
+ONLY deferred piece — needs hardware). Resolves calendar events from a Google secret-iCal URL at
+render time, polls the feed, and re-renders only on semantic content change. **63 cargo tests.**
+- Modules (`device/src/`): `main` (bootstrap + poll task), `config`, `document` (serde mirror of
+  the editor `DocState`), `storage` (files + image GC), `display` (trait + `WebPreview`), `render`
+  (tiny-skia + ab_glyph; calendar/text/image/drawing → 6-colour quantise), `text`, `sample`
+  (deterministic calendar data, ported from `src/lib/sampleCalendar.ts` — keep the two in sync),
+  `fonts` (loads `public/fonts` + embedded Atkinson fallback), `calendar` (hand-rolled ICS parse +
+  resolve + semantic `signature`), `api`, `state`.
+- Run it: `cd device && CORKBOARD_DIST=../dist CORKBOARD_FONTS=../public/fonts cargo run`
+  (needs `npm run build` first so `../dist` exists). Env: `CORKBOARD_DATA` (default `./data`),
+  `CORKBOARD_PORT` (8080), `CORKBOARD_DIST`, `CORKBOARD_FONTS`.
+- Editor↔device sync (1e): the editor hydrates from `GET /api/document` on startup and Publish
+  does `PUT /api/document`; `src/lib/deviceApi.ts` has the tolerant client (`getDocument`,
+  `putDocument`, `fetchFeeds`, `refreshNow`).
+- Parity guardrail (S4): `npm run test:parity` (Playwright) compares the editor surface screenshot
+  vs `preview.png` on a coarse content-mask IoU (≥0.35; feedless doc → both use sample data).
 
-Build order: (1) editor surgery → (2) server skeleton + API → (3) Rust renderer →
-(4) calendar feed + refresh → (5) parity guardrail → (6) Panel SPI driver (when hardware lands).
+The full design is `docs/specs/2026-06-27-device-server-design.md`; durable decisions in
+`context/decisions.md`, the wire contract in `context/protocol.md`, the panel in `context/hardware.md`.
+
+**Only remaining (hardware): the `Panel` SPI driver** behind the `Display` trait, plus a small set
+of low-risk review Minors (see the device handoff / `.superpowers/sdd/review-device-final.md`).
 
 **Editor surgery — DONE (plans 1a–1d, all implemented; 137 tests green, build clean):**
 - **1a:** removed clock + timeline (components + store API); `DocState` gained `livePageId`; factory/tool-options dropped `clockVariant`.
@@ -60,7 +75,7 @@ Build order: (1) editor surgery → (2) server skeleton + API → (3) Rust rende
 - Still a stub: image upload (`ImageOptions`) — becomes `POST /api/images` (id-referenced) when the device server lands.
 
 **Known issues:**
-- None yet.
+- The device `Panel` SPI driver is not built (needs hardware). A few low-risk device review Minors remain (see `.superpowers/sdd/review-device-final.md`): `/api/bogus` returns index.html not 404; ICS `signature` delimiter aliasing; 2MB upload limit; image content-type now sniffed. Editor image upload (`ImageOptions`) is still a stub (device `POST /api/images` works; the editor UI doesn't call it yet). Bundled fonts ship Atkinson only (Inter/Caveat deferred — need static TTFs).
 
 **Open decisions** (see `context/decisions.md`):
 - Renderer crate choices (raster, text shaping, ICS parse, image decode) — decide at implementation time.
