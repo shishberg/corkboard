@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { makeElement, makeDrawingElement } from './elementFactory'
 
-const opts = { clockVariant: 'time-date' as const, calendarVariant: 'week' as const }
+const opts = { clockVariant: 'time-date' as const, calendarVariant: 'week' as const, colour: 'red' as const }
 const size = { w: 800, h: 480 }
 
 describe('makeElement', () => {
@@ -36,6 +36,11 @@ describe('makeElement', () => {
     expect(el.w).toBe(120)
     expect(el.h).toBe(90)
   })
+
+  it('carries the colour from opts onto the element', () => {
+    const el = makeElement('clock', opts, size)
+    expect(el.colour).toBe('red')
+  })
 })
 
 describe('makeDrawingElement', () => {
@@ -51,5 +56,10 @@ describe('makeDrawingElement', () => {
     expect(el.strokes[0].size).toBe(4)
     // first point sits at (50-46, 60-56) = (4, 4) in element-local space
     expect(el.strokes[0].points[0]).toEqual({ x: 4, y: 4 })
+  })
+
+  it('sets element-level colour from the colour argument', () => {
+    const el = makeDrawingElement([{ x: 10, y: 10 }, { x: 20, y: 20 }], 'blue', 2)
+    expect(el.colour).toBe('blue')
   })
 })

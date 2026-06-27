@@ -6,14 +6,14 @@ const KEY = 'corkboard.toolOptions'
 interface ToolOptionsState {
   clockVariant: 'time' | 'time-date' | 'date'
   calendarVariant: 'today' | 'week'
-  drawColour: EpaperColour
+  colour: EpaperColour
   penSize: number
 }
 
 const defaults: ToolOptionsState = {
   clockVariant: 'time',
   calendarVariant: 'today',
-  drawColour: 'black',
+  colour: 'black',
   penSize: 4,
 }
 

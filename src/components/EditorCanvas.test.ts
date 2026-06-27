@@ -18,7 +18,7 @@ function winPointer(type: string, x: number, y: number): PointerEvent {
 describe('EditorCanvas', () => {
   it('dragging a movable element updates its position in the store', async () => {
     const store = usePagesStore()
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80 })
+    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
     // Dispatch the pointerdown directly: test-utils' trigger builds a real
@@ -34,7 +34,7 @@ describe('EditorCanvas', () => {
 
   it('renders one MovableElement per element on the selected page', async () => {
     const store = usePagesStore()
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80 })
+    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
     const w = mount(EditorCanvas, { global: { plugins: [] } })
     await w.vm.$nextTick()
     expect(w.findAll('[data-role="movable"]').length).toBe(1)
@@ -42,7 +42,7 @@ describe('EditorCanvas', () => {
 
   it('Backspace deletes the selected element', async () => {
     const store = usePagesStore()
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80 })
+    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace' }))
@@ -86,7 +86,7 @@ describe('EditorCanvas', () => {
 
   it('clears selection when the empty surface is clicked', async () => {
     const store = usePagesStore()
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80 })
+    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
     expect(store.selectedElId).toBe('e1')
     const w = mount(EditorCanvas)
     await w.get('[data-role="surface"]').trigger('pointerdown')

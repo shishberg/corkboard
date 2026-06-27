@@ -2,7 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore, ensureToolOptionsPersistence } from '@/stores/toolOptions'
-import type { ToolId } from '@/stores/types'
+import type { ToolId, EpaperColour } from '@/stores/types'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import {
@@ -25,6 +25,23 @@ function pickTool(tool: ToolId) {
   // Selecting a tool only makes it active; elements are created by drawing on
   // the canvas (see EditorCanvas).
   store.setActiveTool(tool)
+}
+
+const palette: EpaperColour[] = ['black', 'white', 'red', 'yellow', 'blue', 'green']
+
+const selectedEl = computed(() => {
+  const id = store.selectedElId
+  if (!id) return null
+  return store.selectedPage?.elements.find((e) => e.id === id) ?? null
+})
+
+const activeColour = computed(() => selectedEl.value?.colour ?? opts.colour)
+
+function pickColour(c: EpaperColour) {
+  opts.colour = c
+  if (selectedEl.value) {
+    store.setElementColour(selectedEl.value.id, c)
+  }
 }
 </script>
 
@@ -85,7 +102,7 @@ function pickTool(tool: ToolId) {
             :class="store.activeTool === 'draw' ? 'bg-neutral-200' : ''"
             @click="pickTool('draw')"
           >
-            <Pencil class="h-5 w-5" :style="{ color: opts.drawColour }" />
+            <Pencil class="h-5 w-5" :style="{ color: opts.colour }" />
           </button>
         </PopoverTrigger>
         <PopoverContent side="right" class="w-48"><DrawOptions /></PopoverContent>
@@ -120,6 +137,19 @@ function pickTool(tool: ToolId) {
         </TooltipTrigger>
         <TooltipContent side="right">Delete selected (Del)</TooltipContent>
       </Tooltip>
+
+      <!-- Colour panel -->
+      <div data-role="colour-panel" class="mt-2 flex flex-col items-center gap-1">
+        <button
+          v-for="c in palette"
+          :key="c"
+          :data-colour="c"
+          class="h-6 w-6 rounded-full border border-neutral-300"
+          :class="activeColour === c ? 'ring-2 ring-blue-500 ring-offset-1' : ''"
+          :style="{ backgroundColor: c }"
+          @click="pickColour(c)"
+        />
+      </div>
     </div>
   </TooltipProvider>
 </template>

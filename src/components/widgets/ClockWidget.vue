@@ -19,7 +19,7 @@ const dateSize = computed(
 
 <template>
   <div class="flex h-full w-full flex-col items-center justify-center overflow-hidden bg-white">
-    <div v-if="showTime" data-role="time" class="font-bold leading-none" :style="{ fontSize: timeSize }">12:45</div>
-    <div v-if="showDate" data-role="date" class="text-neutral-600 leading-tight" :style="{ fontSize: dateSize }">Mon 23 Jun</div>
+    <div v-if="showTime" data-role="time" class="font-bold leading-none" :style="{ fontSize: timeSize, color: el.colour }">12:45</div>
+    <div v-if="showDate" data-role="date" class="leading-tight" :style="{ fontSize: dateSize, color: el.colour }">Mon 23 Jun</div>
   </div>
 </template>

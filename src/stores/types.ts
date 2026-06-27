@@ -2,7 +2,7 @@ export type Orientation = 'landscape' | 'portrait'
 export type ToolId = 'select' | 'clock' | 'calendar' | 'draw' | 'image'
 export type EpaperColour = 'black' | 'white' | 'red' | 'yellow' | 'blue' | 'green'
 
-export interface BaseEl { id: string; type: string; x: number; y: number; w: number; h: number }
+export interface BaseEl { id: string; type: string; x: number; y: number; w: number; h: number; colour: EpaperColour }
 export interface ClockEl extends BaseEl { type: 'clock'; variant: 'time' | 'time-date' | 'date' }
 export interface CalendarEl extends BaseEl { type: 'calendar'; variant: 'today' | 'week'; events: CalEvent[] }
 export interface ImageEl extends BaseEl { type: 'image'; src: string }

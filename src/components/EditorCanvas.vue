@@ -111,13 +111,13 @@ function onCreateUp(e: PointerEvent) {
   const def = defaultSize(createTool)
   const rect = moved < CLICK_SLOP ? { x: createStart.x, y: createStart.y, w: def.w, h: def.h } : c
   store.addElement(
-    makeElement(createTool, { clockVariant: opts.clockVariant, calendarVariant: opts.calendarVariant }, size.value, rect),
+    makeElement(createTool, { clockVariant: opts.clockVariant, calendarVariant: opts.calendarVariant, colour: opts.colour }, size.value, rect),
   )
 }
 
 // --- Pen: turn a finished stroke into a drawing element ---
 function onStroke(points: { x: number; y: number }[]) {
-  store.addElement(makeDrawingElement(points, opts.drawColour, opts.penSize))
+  store.addElement(makeDrawingElement(points, opts.colour, opts.penSize))
 }
 </script>
 

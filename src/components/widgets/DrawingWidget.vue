@@ -17,7 +17,7 @@ const toPath = (points: { x: number; y: number }[]) => points.map((p) => `${p.x}
       :key="i"
       :points="toPath(s.points)"
       fill="none"
-      :stroke="s.colour"
+      :stroke="el.colour"
       :stroke-width="s.size"
       stroke-linecap="round"
       stroke-linejoin="round"

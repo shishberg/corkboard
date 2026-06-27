@@ -14,7 +14,7 @@ const rows = computed(() =>
 </script>
 
 <template>
-  <div class="h-full w-full overflow-hidden bg-white p-2" :style="{ fontSize: baseSize }">
+  <div data-role="calendar-root" class="h-full w-full overflow-hidden bg-white p-2" :style="{ fontSize: baseSize, color: el.colour }">
     <div v-if="isWeek" class="grid grid-cols-7 gap-1">
       <div v-for="d in days" :key="d" data-role="day" class="border p-1 text-center">{{ d }}</div>
     </div>

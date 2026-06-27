@@ -6,6 +6,7 @@ const uid = () => `el-${Date.now().toString(36)}-${(counter++).toString(36)}`
 interface FactoryOpts {
   clockVariant: 'time' | 'time-date' | 'date'
   calendarVariant: 'today' | 'week'
+  colour: EpaperColour
 }
 
 interface Rect {
@@ -33,7 +34,7 @@ export function makeElement(
 ): El {
   const { w, h } = SIZES[tool]
   const geom: Rect = rect ?? { w, h, x: (pageSize.w - w) / 2, y: (pageSize.h - h) / 2 }
-  const base = { id: uid(), ...geom }
+  const base = { id: uid(), ...geom, colour: opts.colour }
   switch (tool) {
     case 'clock':
       return { ...base, type: 'clock', variant: opts.clockVariant }
@@ -66,6 +67,7 @@ export function makeDrawingElement(
     y: minY,
     w: Math.max(1, maxX - minX),
     h: Math.max(1, maxY - minY),
+    colour,
     strokes: [{ colour, size, points: local }],
   }
 }

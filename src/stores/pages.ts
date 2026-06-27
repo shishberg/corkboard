@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { DocState, El, Page, ToolId, BaseEl } from './types'
+import type { DocState, El, Page, ToolId, BaseEl, EpaperColour } from './types'
 
 let counter = 0
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`
@@ -99,6 +99,11 @@ export const usePagesStore = defineStore('pages', {
     removeFromTimeline(index: number) {
       if (!Number.isInteger(index) || index < 0 || index >= this.timeline.length) return
       this.timeline.splice(index, 1)
+    },
+    setElementColour(id: string, colour: EpaperColour) {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      const el = page?.elements.find((e) => e.id === id)
+      if (el) el.colour = colour
     },
   },
 })

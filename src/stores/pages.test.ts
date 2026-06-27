@@ -6,7 +6,7 @@ import type { ClockEl } from './types'
 beforeEach(() => setActivePinia(createPinia()))
 
 function clockEl(id: string): ClockEl {
-  return { id, type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80 }
+  return { id, type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' }
 }
 
 describe('usePagesStore', () => {
@@ -152,5 +152,19 @@ describe('usePagesStore', () => {
     s.addToTimeline(s.pages[0].id)
     s.removeFromTimeline(-1)
     expect(s.timeline.length).toBe(1)
+  })
+
+  it('setElementColour sets the colour on an element', () => {
+    const s = usePagesStore()
+    s.addElement(clockEl('e1'))
+    s.setElementColour('e1', 'red')
+    expect(s.selectedPage?.elements[0].colour).toBe('red')
+  })
+
+  it('setElementColour is a no-op for an unknown id', () => {
+    const s = usePagesStore()
+    s.addElement(clockEl('e1'))
+    s.setElementColour('ghost', 'blue')
+    expect(s.selectedPage?.elements[0].colour).toBe('black')
   })
 })

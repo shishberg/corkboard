@@ -12,15 +12,15 @@ describe('useToolOptionsStore', () => {
     const s = useToolOptionsStore()
     expect(s.clockVariant).toBe('time')
     expect(s.calendarVariant).toBe('today')
-    expect(s.drawColour).toBe('black')
+    expect(s.colour).toBe('black')
     expect(s.penSize).toBe(4)
   })
 
   it('persists changes to localStorage', () => {
     const s = ensureToolOptionsPersistence()
-    s.drawColour = 'red'
+    s.colour = 'red'
     const saved = JSON.parse(localStorage.getItem('corkboard.toolOptions') || '{}')
-    expect(saved.drawColour).toBe('red')
+    expect(saved.colour).toBe('red')
   })
 
   it('restores from localStorage on init', () => {
