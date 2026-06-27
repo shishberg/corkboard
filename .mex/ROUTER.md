@@ -29,16 +29,16 @@ Then read this file fully before doing anything else in this session.
 
 ## Current Project State
 
-The **frontend-only web UI editor is built and working** (no device wiring yet).
+The **frontend-only web UI editor is built and working** (no device wiring yet). **Editor surgery plan 1a is done** — the document model is migrated to the round-two shape (no clock, no timeline; `livePageId` added; element types `calendar | image | drawing`). See `docs/plans/2026-06-27-editor-surgery-1a-foundation.md`.
 
 **Working:**
-- Web UI editor (Vite + Vue 3 + TS + Pinia + Tailwind v4 + shadcn-vue), frontend-only. App shell in `src/App.vue`: TopBar, PageSidebar, ToolRail, EditorCanvas, Timeline.
-- Document state in `usePagesStore` (`src/stores/pages.ts`) — pages, elements, timeline, orientation, selection; this Pinia shape is the draft page-state contract.
-- Persisted tool options (`src/stores/toolOptions.ts`, localStorage), element factory, hand-rolled drag/resize (`useDraggableResizable` + `MovableElement`), widgets (Clock/Calendar/Image with size-scaled fonts; pen via DrawingLayer/DrawingWidget).
-- Element creation is live draw-to-place: picking clock/calendar/image only sets the active tool; pressing on the canvas creates the real element immediately and the drag sizes it (a click drops a default size), then the tool auto-switches back to select. Creation tools always create — elements are pointer-events:none unless the select tool is active, so only select selects. Backspace/Delete (or the ToolRail trash button) deletes the selected element.
-- Colour is one global current colour shown as a swatch panel below the tools in `ToolRail` (`colour` in toolOptions; `colour` on every `BaseEl`). It drives clock/calendar text and pen ink; selecting an element reflects its colour in the panel and clicking a swatch recolours it (`store.setElementColour`).
+- Web UI editor (Vite + Vue 3 + TS + Pinia + Tailwind v4 + shadcn-vue), frontend-only. App shell in `src/App.vue`: TopBar, PageSidebar, ToolRail, EditorCanvas. (Timeline removed in 1a.)
+- Document state in `usePagesStore` (`src/stores/pages.ts`) — pages, elements, orientation, selection, and `livePageId` (the one page the device displays; defaults to the first page; `setLivePage(id)` guards unknown ids; `livePage` getter is null-safe). No timeline. This Pinia shape is the draft page-state contract. **Note for whoever adds a page-delete action (plan 1d):** it MUST reassign `livePageId` if the live page is removed — no `deletePage` exists today, so nothing dangles yet.
+- Persisted tool options (`src/stores/toolOptions.ts`, localStorage; `load()` whitelists known keys so stale persisted keys are dropped), element factory (`calendar | image`), hand-rolled drag/resize (`useDraggableResizable` + `MovableElement`), widgets (Calendar/Image with size-scaled fonts; pen via DrawingLayer/DrawingWidget). (Clock widget/options removed in 1a.)
+- Element creation is live draw-to-place: picking calendar/image only sets the active tool; pressing on the canvas creates the real element immediately and the drag sizes it (a click drops a default size), then the tool auto-switches back to select. Creation tools always create — elements are pointer-events:none unless the select tool is active, so only select selects. Backspace/Delete (or the ToolRail trash button) deletes the selected element.
+- Colour is one global current colour shown as a swatch panel below the tools in `ToolRail` (`colour` in toolOptions; `colour` on every `BaseEl`). It drives calendar text and pen ink; selecting an element reflects its colour in the panel and clicking a swatch recolours it (`store.setElementColour`).
 - Pen uses **perfect-freehand** (`src/lib/freehand.ts` `strokeToPath`): strokes render as filled SVG ink paths (live preview + committed + thumbnail). Raw input points are stored element-local with `natW`/`natH`, so resizing scales the stroke and a tap leaves a dot. Drawings show in page thumbnails.
-- 81 tests pass (`npm test`); `npm run build` clean.
+- 67 tests pass (`npm test`); `npm run build` clean.
 
 **Designed but not yet built — the device server (round two, 2026-06-27).**
 The full design is `docs/specs/2026-06-27-device-server-design.md`; the durable decisions are
@@ -52,11 +52,12 @@ Not started in code.
 Build order: (1) editor surgery → (2) server skeleton + API → (3) Rust renderer →
 (4) calendar feed + refresh → (5) parity guardrail → (6) Panel SPI driver (when hardware lands).
 
-**Editor surgery this design forces (NOT done yet — the code below still has the old shape):**
-- Remove `Timeline`/`TimelineItem`, `ClockWidget`/`ClockOptions`, the clock tool, clock in thumbnails, timeline reorder.
-- `DocState`: drop `timeline`/`TimelineEntry` and `ClockEl`; add `livePageId`.
-- `CalendarEl`: drop frozen `events[]`; add `feedId` + a date-only variant; add a feed picker + "Refresh now" button + a "make live" affordance.
-- Image upload still a stub (`ImageOptions`); now becomes `POST /api/images` referenced by id.
+**Editor surgery — split into plans 1a–1d (`docs/plans/`):**
+- **1a — DONE:** removed `Timeline`/`TimelineItem`, `ClockWidget`/`ClockOptions`, the clock tool, clock in thumbnails, timeline reorder; `DocState` dropped `timeline`/`TimelineEntry` and `ClockEl` and gained `livePageId`; factory/tool-options dropped `clockVariant`.
+- **1b — TODO (plan not yet written):** `CalendarEl` drops frozen `events[]` (still present today, factory sets `events: []`) for `feedId` + variant incl. a `date` variant; `CalendarOptions` gets a feed picker (stub list) + a "Refresh now" button; `CalendarWidget` renders the date + sample events.
+- **1c — TODO (plan not yet written):** new `TextEl` + `text` tool, `TextWidget`/`TextOptions`, on-canvas (in-place) text editing, font picker over the bundled font manifest.
+- **1d — TODO (plan not yet written):** a "make page live" affordance in `PageSidebar`/`PageThumbnail` driving `livePageId`, with the live page marked. **Must add a `deletePage` that reassigns `livePageId`** when the live page is removed (final-review Minor 1).
+- Image upload still a stub (`ImageOptions`); later becomes `POST /api/images` referenced by id.
 
 **Known issues:**
 - None yet.
