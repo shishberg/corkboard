@@ -3,7 +3,8 @@ import { ref } from 'vue'
 import { usePagesStore } from '@/stores/pages'
 import { Button } from '@/components/ui/button'
 import { RectangleHorizontal, RectangleVertical } from '@lucide/vue'
-import { refreshNow } from '@/lib/deviceApi'
+import { refreshNow, putDocument } from '@/lib/deviceApi'
+import type { DocState } from '@/stores/types'
 
 const store = usePagesStore()
 const toast = ref<string | null>(null)
@@ -13,9 +14,9 @@ function showToast(msg: string) {
   setTimeout(() => (toast.value = null), 1500)
 }
 
-function publish() {
-  // Stubbed this pass — no network call.
-  showToast('Published (stub)')
+async function publish() {
+  const ok = await putDocument(store.$state as DocState)
+  showToast(ok ? 'Published' : 'Device offline')
 }
 
 async function handleRefresh() {

@@ -125,5 +125,15 @@ export const usePagesStore = defineStore('pages', {
       if (!el || el.type !== 'text') return
       ;(el as TextEl).align = align
     },
+    hydrate(doc: DocState) {
+      if (!doc.pages || doc.pages.length === 0) return
+      this.orientation = doc.orientation
+      this.pages = doc.pages
+      this.activeTool = doc.activeTool
+      this.selectedElId = doc.selectedElId
+      const pageIds = new Set(doc.pages.map((p) => p.id))
+      this.livePageId = doc.livePageId && pageIds.has(doc.livePageId) ? doc.livePageId : doc.pages[0].id
+      this.selectedPageId = doc.selectedPageId && pageIds.has(doc.selectedPageId) ? doc.selectedPageId : doc.pages[0].id
+    },
   },
 })

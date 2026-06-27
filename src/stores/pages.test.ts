@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePagesStore } from './pages'
-import type { ImageEl, DrawingEl, TextEl } from './types'
+import type { ImageEl, DrawingEl, TextEl, DocState } from './types'
 
 beforeEach(() => setActivePinia(createPinia()))
 
@@ -258,6 +258,57 @@ describe('usePagesStore', () => {
     const before = s.pages.length
     s.deletePage('ghost')
     expect(s.pages.length).toBe(before)
+  })
+
+  // hydrate
+  describe('hydrate', () => {
+    it('replaces pages and livePageId from a loaded doc', () => {
+      const s = usePagesStore()
+      const loaded: DocState = {
+        orientation: 'portrait',
+        pages: [{ id: 'loaded-p1', name: 'Loaded', elements: [] }],
+        livePageId: 'loaded-p1',
+        selectedPageId: 'loaded-p1',
+        selectedElId: null,
+        activeTool: 'draw',
+      }
+      s.hydrate(loaded)
+      expect(s.pages.length).toBe(1)
+      expect(s.pages[0].id).toBe('loaded-p1')
+      expect(s.livePageId).toBe('loaded-p1')
+      expect(s.orientation).toBe('portrait')
+      expect(s.activeTool).toBe('draw')
+    })
+
+    it('is a no-op when doc.pages is empty', () => {
+      const s = usePagesStore()
+      const originalPageId = s.pages[0].id
+      const empty: DocState = {
+        orientation: 'portrait',
+        pages: [],
+        livePageId: null,
+        selectedPageId: null,
+        selectedElId: null,
+        activeTool: 'draw',
+      }
+      s.hydrate(empty)
+      expect(s.pages.length).toBe(1)
+      expect(s.pages[0].id).toBe(originalPageId)
+    })
+
+    it('fixes a dangling selectedPageId to the first page', () => {
+      const s = usePagesStore()
+      const loaded: DocState = {
+        orientation: 'landscape',
+        pages: [{ id: 'real-p1', name: 'Page', elements: [] }],
+        livePageId: 'real-p1',
+        selectedPageId: 'ghost-id',
+        selectedElId: null,
+        activeTool: 'select',
+      }
+      s.hydrate(loaded)
+      expect(s.selectedPageId).toBe('real-p1')
+    })
   })
 
   it('setElementColour on a drawing element also updates each stroke colour', () => {

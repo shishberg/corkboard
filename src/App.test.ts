@@ -1,12 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import App from './App.vue'
 import { usePagesStore } from '@/stores/pages'
+import * as deviceApi from '@/lib/deviceApi'
 
 beforeEach(() => {
   localStorage.clear()
   setActivePinia(createPinia())
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 function winPointer(type: string, x: number, y: number): PointerEvent {
@@ -43,8 +48,11 @@ describe('App integration', () => {
   })
 
   it('publish shows a toast', async () => {
+    vi.spyOn(deviceApi, 'putDocument').mockResolvedValue(true)
     const w = mount(App)
     await w.get('[data-role="publish"]').trigger('click')
+    await w.vm.$nextTick()
+    await w.vm.$nextTick()
     expect(w.get('[data-role="toast"]').text()).toContain('Published')
   })
 })
