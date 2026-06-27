@@ -22,7 +22,12 @@ function load(): ToolOptionsState {
     const parsed = JSON.parse(raw) as Record<string, unknown>
     // Migrate legacy key: drawColour → colour
     const colour = (parsed.colour ?? parsed.drawColour ?? defaults.colour) as ToolOptionsState['colour']
-    return { ...defaults, ...parsed, colour }
+    // Whitelist only known keys; unknown persisted keys (e.g. stale clockVariant) are dropped
+    return {
+      calendarVariant: (parsed.calendarVariant ?? defaults.calendarVariant) as ToolOptionsState['calendarVariant'],
+      colour,
+      penSize: (parsed.penSize ?? defaults.penSize) as ToolOptionsState['penSize'],
+    }
   } catch {
     return { ...defaults }
   }

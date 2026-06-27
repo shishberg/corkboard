@@ -42,4 +42,17 @@ describe('useToolOptionsStore', () => {
     const s = useToolOptionsStore()
     expect(s.colour).toBe('blue')
   })
+
+  it('does not carry stale unknown keys (e.g. clockVariant) from persisted blob', () => {
+    localStorage.setItem(
+      'corkboard.toolOptions',
+      JSON.stringify({ calendarVariant: 'week', colour: 'red', penSize: 8, clockVariant: 'time' }),
+    )
+    setActivePinia(createPinia())
+    const s = useToolOptionsStore()
+    expect('clockVariant' in s.$state).toBe(false)
+    expect(s.calendarVariant).toBe('week')
+    expect(s.colour).toBe('red')
+    expect(s.penSize).toBe(8)
+  })
 })
