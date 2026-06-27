@@ -9,6 +9,7 @@ const props = defineProps<{
   h: number
   selected: boolean
   scale: number
+  interactive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -32,7 +33,7 @@ function onPointerDown(e: PointerEvent) {
   <div
     class="absolute select-none"
     :class="selected ? 'outline outline-2 outline-blue-500' : ''"
-    :style="{ left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px`, touchAction: 'none' }"
+    :style="{ left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px`, touchAction: 'none', pointerEvents: interactive === false ? 'none' : undefined }"
     @pointerdown="onPointerDown"
   >
     <slot />

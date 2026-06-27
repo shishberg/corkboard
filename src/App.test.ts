@@ -33,6 +33,8 @@ describe('App integration', () => {
     window.dispatchEvent(winPointer('pointerup', 110, 140))
     await w.vm.$nextTick()
     expect(store.selectedPage?.elements.some((e) => e.type === 'clock')).toBe(true)
+    // After creation, tool automatically switches back to select
+    expect(store.activeTool).toBe('select')
 
     expect(store.orientation).toBe('landscape')
     await w.get('[data-role="orientation"]').trigger('click')

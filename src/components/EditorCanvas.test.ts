@@ -18,6 +18,7 @@ function winPointer(type: string, x: number, y: number): PointerEvent {
 describe('EditorCanvas', () => {
   it('dragging a movable element updates its position in the store', async () => {
     const store = usePagesStore()
+    store.setActiveTool('select')
     store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
@@ -50,6 +51,16 @@ describe('EditorCanvas', () => {
     w.unmount()
   })
 
+  it('Delete key deletes the selected element', async () => {
+    const store = usePagesStore()
+    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
+    expect(store.selectedPage?.elements.length).toBe(0)
+    w.unmount()
+  })
+
   it('drag-creates an element of the active tool at the dragged rect', async () => {
     const store = usePagesStore()
     store.setActiveTool('clock')
@@ -65,6 +76,8 @@ describe('EditorCanvas', () => {
     expect(els.length).toBe(1)
     expect(els[0].type).toBe('clock')
     expect({ x: els[0].x, y: els[0].y, w: els[0].w, h: els[0].h }).toEqual({ x: 10, y: 20, w: 100, h: 120 })
+    // After creating, tool switches to select
+    expect(store.activeTool).toBe('select')
     w.unmount()
   })
 
@@ -81,6 +94,8 @@ describe('EditorCanvas', () => {
     const els = store.selectedPage?.elements ?? []
     expect(els.length).toBe(1)
     expect(els[0].type).toBe('drawing')
+    // Pen tool stays active after drawing
+    expect(store.activeTool).toBe('draw')
     w.unmount()
   })
 
@@ -132,6 +147,29 @@ describe('EditorCanvas', () => {
     expect(landscapeScale).not.toBeNull()
     expect(landscapeScale).not.toBeCloseTo(portraitScale as number, 5)
 
+    w.unmount()
+  })
+
+  it('with a creation tool active, pointerdown on an existing element creates a NEW element', async () => {
+    const store = usePagesStore()
+    // Pre-place an existing element
+    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 50, y: 50, w: 200, h: 80, colour: 'black' as const })
+    store.setActiveTool('clock')
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+
+    // pointer-events:none on MovableElement means event hits the surface instead.
+    // Simulate via surface pointerdown (as if it passed through).
+    w.get('[data-role="surface"]').element.dispatchEvent(winPointer('pointerdown', 10, 20))
+    window.dispatchEvent(winPointer('pointermove', 110, 140))
+    window.dispatchEvent(winPointer('pointerup', 110, 140))
+    await nextTick()
+
+    const els = store.selectedPage?.elements ?? []
+    // A second element was created — count is 2
+    expect(els.length).toBe(2)
+    // The selected element is the newly created one (not 'e1')
+    expect(store.selectedElId).not.toBe('e1')
     w.unmount()
   })
 })

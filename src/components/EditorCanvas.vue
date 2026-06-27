@@ -39,7 +39,7 @@ onBeforeUnmount(() => {
   ro?.disconnect()
   window.removeEventListener('keydown', onKeydown)
   stopCreateDrag()
-  creating.value = null
+  creatingId = null
 })
 watch(size, recompute)
 
@@ -66,13 +66,14 @@ function surfaceLocal(e: PointerEvent) {
 }
 
 // --- Draw-to-place: drag on the surface to create the active tool's element ---
-const creating = ref<{ x: number; y: number; w: number; h: number } | null>(null)
 let createStart = { x: 0, y: 0 }
 let createStartRaw = { x: 0, y: 0 }
 let createTool: 'clock' | 'calendar' | 'image' = 'clock'
+let creatingId: string | null = null
 // Below this many screen pixels of movement we treat the gesture as a click,
 // not a drag. Measured in raw CSS pixels so zoom doesn't change the decision.
 const CLICK_SLOP = 8
+const CREATE_MIN = 8
 
 function onSurfacePointerDown(e: PointerEvent) {
   const tool = store.activeTool
@@ -80,7 +81,15 @@ function onSurfacePointerDown(e: PointerEvent) {
     createTool = tool
     createStart = surfaceLocal(e)
     createStartRaw = { x: e.clientX, y: e.clientY }
-    creating.value = { ...createStart, w: 0, h: 0 }
+    // Create the real element immediately at minimum size
+    const el = makeElement(
+      tool,
+      { clockVariant: opts.clockVariant, calendarVariant: opts.calendarVariant, colour: opts.colour },
+      size.value,
+      { x: createStart.x, y: createStart.y, w: CREATE_MIN, h: CREATE_MIN },
+    )
+    store.addElement(el)
+    creatingId = el.id
     window.addEventListener('pointermove', onCreateMove)
     window.addEventListener('pointerup', onCreateUp)
   } else {
@@ -92,27 +101,28 @@ function stopCreateDrag() {
   window.removeEventListener('pointerup', onCreateUp)
 }
 function onCreateMove(e: PointerEvent) {
-  if (!creating.value) return
+  if (!creatingId) return
   const p = surfaceLocal(e)
-  creating.value = {
+  store.updateElement(creatingId, {
     x: Math.min(createStart.x, p.x),
     y: Math.min(createStart.y, p.y),
-    w: Math.abs(p.x - createStart.x),
-    h: Math.abs(p.y - createStart.y),
-  }
+    w: Math.max(CREATE_MIN, Math.abs(p.x - createStart.x)),
+    h: Math.max(CREATE_MIN, Math.abs(p.y - createStart.y)),
+  })
 }
 function onCreateUp(e: PointerEvent) {
   stopCreateDrag()
-  const c = creating.value
-  creating.value = null
-  if (!c) return
-  // A click (movement under the slop) drops a default-sized element at the click point.
+  const id = creatingId
+  creatingId = null
+  if (!id) return
+  // A click (movement under slop) sets a default size centred on the click point
   const moved = Math.hypot(e.clientX - createStartRaw.x, e.clientY - createStartRaw.y)
-  const def = defaultSize(createTool)
-  const rect = moved < CLICK_SLOP ? { x: createStart.x, y: createStart.y, w: def.w, h: def.h } : c
-  store.addElement(
-    makeElement(createTool, { clockVariant: opts.clockVariant, calendarVariant: opts.calendarVariant, colour: opts.colour }, size.value, rect),
-  )
+  if (moved < CLICK_SLOP) {
+    const def = defaultSize(createTool)
+    store.updateElement(id, { x: createStart.x, y: createStart.y, w: def.w, h: def.h })
+  }
+  // Switch to select so the user can immediately interact with what they made
+  store.setActiveTool('select')
 }
 
 // --- Pen: turn a finished stroke into a drawing element ---
@@ -146,6 +156,7 @@ function onStroke(points: { x: number; y: number }[]) {
         :h="el.h"
         :selected="store.selectedElId === el.id"
         :scale="scale"
+        :interactive="store.activeTool === 'select'"
         @select="store.selectElement($event)"
         @update="store.updateElement(el.id, $event)"
       >
@@ -154,13 +165,6 @@ function onStroke(points: { x: number; y: number }[]) {
         <ImageWidget v-else-if="el.type === 'image'" :el="el" />
         <DrawingWidget v-else-if="el.type === 'drawing'" :el="el" />
       </MovableElement>
-
-      <!-- Rubber-band preview while drag-creating an element -->
-      <div
-        v-if="creating"
-        class="pointer-events-none absolute border-2 border-dashed border-blue-400 bg-blue-100/30"
-        :style="{ left: `${creating.x}px`, top: `${creating.y}px`, width: `${creating.w}px`, height: `${creating.h}px` }"
-      />
 
       <!-- Active drawing surface, only while the pen tool is selected -->
       <DrawingLayer v-if="store.activeTool === 'draw'" :size="size" :scale="scale" @stroke="onStroke" />
