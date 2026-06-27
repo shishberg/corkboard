@@ -42,6 +42,35 @@ pub struct Stroke {
     pub points: Vec<Point>,
 }
 
+/// Which layout the calendar widget shows.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CalendarVariant {
+    Date,
+    Today,
+    Week,
+}
+
+impl Default for CalendarVariant {
+    fn default() -> Self {
+        CalendarVariant::Today
+    }
+}
+
+/// Horizontal text alignment.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TextAlign {
+    Left,
+    Center,
+}
+
+impl Default for TextAlign {
+    fn default() -> Self {
+        TextAlign::Left
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarEl {
@@ -51,6 +80,10 @@ pub struct CalendarEl {
     pub w: f32,
     pub h: f32,
     pub colour: Colour,
+    #[serde(default)]
+    pub variant: CalendarVariant,
+    #[serde(default)]
+    pub feed_id: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -62,7 +95,8 @@ pub struct ImageEl {
     pub w: f32,
     pub h: f32,
     pub colour: Colour,
-    pub image_id: Option<String>,
+    /// Image asset id — wire field is `src` to match the editor.
+    pub src: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -74,6 +108,12 @@ pub struct DrawingEl {
     pub w: f32,
     pub h: f32,
     pub colour: Colour,
+    /// Natural (local) width of the drawing canvas. Points are stored in this space.
+    #[serde(default)]
+    pub nat_w: f32,
+    /// Natural (local) height of the drawing canvas.
+    #[serde(default)]
+    pub nat_h: f32,
     pub strokes: Vec<Stroke>,
 }
 
@@ -87,6 +127,10 @@ pub struct TextEl {
     pub h: f32,
     pub colour: Colour,
     pub text: String,
+    #[serde(default)]
+    pub font: String,
+    #[serde(default)]
+    pub align: TextAlign,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -158,7 +202,9 @@ mod tests {
                         "y": 10.0,
                         "w": 200.0,
                         "h": 150.0,
-                        "colour": "blue"
+                        "colour": "blue",
+                        "variant": "week",
+                        "feedId": "feed-1"
                     },
                     {
                         "type": "image",
@@ -168,7 +214,7 @@ mod tests {
                         "w": 100.0,
                         "h": 100.0,
                         "colour": "white",
-                        "imageId": "img-abc123"
+                        "src": "img-abc123"
                     },
                     {
                         "type": "drawing",
@@ -178,6 +224,8 @@ mod tests {
                         "w": 400.0,
                         "h": 300.0,
                         "colour": "black",
+                        "natW": 400.0,
+                        "natH": 300.0,
                         "strokes": [
                             {
                                 "colour": "red",
@@ -197,7 +245,9 @@ mod tests {
                         "w": 300.0,
                         "h": 50.0,
                         "colour": "green",
-                        "text": "Hello, World!"
+                        "text": "Hello, World!",
+                        "font": "atkinson-hyperlegible",
+                        "align": "center"
                     }
                 ]
             }
@@ -224,6 +274,46 @@ mod tests {
         assert!(matches!(page.elements[1], Element::Image(_)));
         assert!(matches!(page.elements[2], Element::Drawing(_)));
         assert!(matches!(page.elements[3], Element::Text(_)));
+
+        // Verify new fields on Image
+        if let Element::Image(img) = &page.elements[1] {
+            assert_eq!(img.src.as_deref(), Some("img-abc123"));
+        }
+
+        // Verify new fields on Drawing
+        if let Element::Drawing(d) = &page.elements[2] {
+            assert_eq!(d.nat_w, 400.0);
+            assert_eq!(d.nat_h, 300.0);
+        }
+
+        // Verify new fields on Text
+        if let Element::Text(t) = &page.elements[3] {
+            assert_eq!(t.font, "atkinson-hyperlegible");
+            assert!(matches!(t.align, TextAlign::Center));
+        }
+
+        // Verify Calendar variant
+        if let Element::Calendar(c) = &page.elements[0] {
+            assert!(matches!(c.variant, CalendarVariant::Week));
+            assert_eq!(c.feed_id, "feed-1");
+        }
+    }
+
+    #[test]
+    fn image_src_field_deserializes() {
+        let json = r#"{
+            "type": "image",
+            "id": "img-1",
+            "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0,
+            "colour": "white",
+            "src": "my-image-id"
+        }"#;
+        let el: Element = serde_json::from_str(json).unwrap();
+        if let Element::Image(img) = el {
+            assert_eq!(img.src.as_deref(), Some("my-image-id"));
+        } else {
+            panic!("expected Image element");
+        }
     }
 
     #[test]
@@ -251,5 +341,39 @@ mod tests {
         assert_eq!(Colour::Yellow.rgb(), [240, 200, 30]);
         assert_eq!(Colour::Blue.rgb(), [40, 80, 200]);
         assert_eq!(Colour::Green.rgb(), [40, 160, 70]);
+    }
+
+    #[test]
+    fn calendar_variant_defaults_to_today() {
+        let json = r#"{
+            "type": "calendar",
+            "id": "c1",
+            "x": 0.0, "y": 0.0, "w": 200.0, "h": 150.0,
+            "colour": "black"
+        }"#;
+        let el: Element = serde_json::from_str(json).unwrap();
+        if let Element::Calendar(c) = el {
+            assert!(matches!(c.variant, CalendarVariant::Today));
+        } else {
+            panic!("expected Calendar element");
+        }
+    }
+
+    #[test]
+    fn text_align_defaults_to_left() {
+        let json = r#"{
+            "type": "text",
+            "id": "t1",
+            "x": 0.0, "y": 0.0, "w": 200.0, "h": 50.0,
+            "colour": "black",
+            "text": "Hello"
+        }"#;
+        let el: Element = serde_json::from_str(json).unwrap();
+        if let Element::Text(t) = el {
+            assert!(matches!(t.align, TextAlign::Left));
+            assert!(t.font.is_empty());
+        } else {
+            panic!("expected Text element");
+        }
     }
 }

@@ -83,7 +83,7 @@ impl Storage {
         for page in &doc.pages {
             for el in &page.elements {
                 if let Element::Image(img) = el {
-                    if let Some(id) = &img.image_id {
+                    if let Some(id) = &img.src {
                         referenced.insert(id.clone());
                     }
                 }
@@ -161,7 +161,7 @@ mod tests {
                     w: 100.0,
                     h: 100.0,
                     colour: Colour::White,
-                    image_id: Some("img-keep".to_string()),
+                    src: Some("img-keep".to_string()),
                 })],
             }],
         };

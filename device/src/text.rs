@@ -111,37 +111,22 @@ pub fn draw_text(
         blits
     };
 
-    // Now blit into the pixmap
+    // Blit into the pixmap using binary coverage (threshold at 0.5).
+    // Anti-aliased blending produces intermediate grey pixels that quantise
+    // to green on the 6-colour e-paper palette; threshold prevents that.
     let [fr, fg, fb] = colour;
-    let fr = fr as f32;
-    let fg = fg as f32;
-    let fb = fb as f32;
 
     let pixels = pixmap.pixels_mut();
     for (bx, by, cov) in glyph_blits {
         if bx < 0 || by < 0 || bx >= pw as i32 || by >= ph as i32 {
             continue;
         }
-        let idx = by as usize * pw as usize + bx as usize;
-        let cur = pixels[idx];
-
-        // De-premultiply current pixel
-        let ca = cur.alpha() as f32;
-        let (cr, cg, cb) = if ca > 0.0 {
-            (
-                cur.red() as f32 * 255.0 / ca,
-                cur.green() as f32 * 255.0 / ca,
-                cur.blue() as f32 * 255.0 / ca,
-            )
-        } else {
-            (255.0, 255.0, 255.0)
-        };
-
-        let nr = (cr * (1.0 - cov) + fr * cov).round().clamp(0.0, 255.0) as u8;
-        let ng = (cg * (1.0 - cov) + fg * cov).round().clamp(0.0, 255.0) as u8;
-        let nb = (cb * (1.0 - cov) + fb * cov).round().clamp(0.0, 255.0) as u8;
-
-        pixels[idx] = tiny_skia::ColorU8::from_rgba(nr, ng, nb, 255).premultiply();
+        if cov >= 0.5 {
+            let idx = by as usize * pw as usize + bx as usize;
+            pixels[idx] =
+                tiny_skia::ColorU8::from_rgba(fr, fg, fb, 255).premultiply();
+        }
+        // coverage < 0.5: leave the background pixel unchanged
     }
 }
 
