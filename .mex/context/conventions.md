@@ -13,7 +13,7 @@ edges:
     condition: when a convention depends on understanding the system structure
   - target: context/stack.md
     condition: when a convention depends on the chosen libraries (e.g. shadcn-vue)
-last_updated: 2026-06-24
+last_updated: 2026-06-27
 ---
 
 # Conventions
@@ -32,7 +32,7 @@ set them up front. Add specifics here as the first code lands (see the GROW step
 - `<script setup lang="ts">` everywhere; typed `defineProps`/`defineEmits`.
 - The store owns document state and guards its own mutations (validates ids/indices); components call store actions rather than mutating state directly.
 - DOM test hooks use `data-role="..."` / `data-tool="..."` attributes, queried in tests.
-- (Future) the device server (Python, TBD) will be a separate codebase talking HTTP via the page-state JSON contract — not built yet.
+- (Future) the device server (Rust + axum) will be a separate codebase talking HTTP via the document contract in `context/protocol.md` — not built yet.
 
 ## Patterns
 - Prefer existing shadcn-vue components over custom UI (see `stack.md`).
@@ -46,4 +46,4 @@ Before presenting any code:
 - [ ] Shared types come from `@/stores/types` (no local redefinition).
 - [ ] New UI prefers shadcn-vue components over hand-rolled equivalents.
 - [ ] No auth/account logic was added (private-network assumption holds).
-- [ ] Commits stage only the task's own files (never `git add -A` — `.mex/`, `.serena/`, `.vscode/`, `CLAUDE.md`, `docs/`, `.superpowers/` stay untracked).
+- [ ] Commits stage only the task's own files (never `git add -A`). Tracked: source, `.mex/`, and `docs/specs/` + `docs/plans/`. Stay untracked: `.serena/`, `.vscode/`, `CLAUDE.md`, `.superpowers/`.

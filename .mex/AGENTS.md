@@ -15,10 +15,8 @@ Manages pages pushed for display on a shared device that acts as a noticeboard �
 - Known boundary so far: no auth — the device sits on a trusted private network where anyone can GET/POST. Do not add account/auth logic without revisiting this.
 
 ## Commands
-[TO BE DETERMINED] — nothing is built yet.
-- Web UI (Vite + Vue) will likely be `npm run dev` / `npm run build` once scaffolded.
-- Device server commands pending the Python decision.
-- Fill in the real commands after the first scaffold lands.
+- Web UI (Vite + Vue): `npm run dev`, `npm test` (Vitest), `npm run build` (`vue-tsc -b` + vite).
+- Device server (Rust + axum): not scaffolded yet — `cargo` commands to be filled in when it lands.
 
 ## Scaffold Growth
 After meaningful work, run GROW:

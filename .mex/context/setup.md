@@ -13,7 +13,7 @@ edges:
     condition: when specific technology versions or library details are needed
   - target: context/architecture.md
     condition: when understanding how components connect during setup
-last_updated: 2026-06-24
+last_updated: 2026-06-27
 ---
 
 # Setup
@@ -22,7 +22,7 @@ The frontend web UI is the only buildable thing so far (frontend-only; no device
 
 ## Prerequisites
 - Node.js — Node 25 is in use here. Note: Node 25 ships a broken built-in `localStorage` (its `clear`/`setItem` are undefined without `--localstorage-file`); tests work around this with a jsdom shim in `src/test-setup.ts`.
-- Device toolchain (Python on the Orange Pi Zero 2W). [TO BE DETERMINED — pending the Python decision; not needed for the web UI]
+- Device toolchain: a **Rust** toolchain (for the device server + renderer; runs on the Orange Pi Zero 2W, develops on any machine via the `WebPreview` display). Not needed for the web UI. [Specific targets/cross-compilation TBD when the device work starts.]
 
 ## First-time Setup
 - `npm install`

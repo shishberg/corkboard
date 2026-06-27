@@ -4,8 +4,12 @@ description: Session bootstrap and navigation hub. Read at the start of every se
 edges:
   - target: context/architecture.md
     condition: when working on system design, integrations, or understanding how components connect
+  - target: context/protocol.md
+    condition: when implementing or changing the editor-to-device API (endpoints, document shape, config/secrets, refresh)
   - target: context/stack.md
     condition: when working with specific technologies, libraries, or making tech decisions
+  - target: context/hardware.md
+    condition: when designing rendering, the device server, or anything that touches the display panel
   - target: context/conventions.md
     condition: when writing new code, reviewing code, or unsure about project patterns
   - target: context/decisions.md
@@ -14,7 +18,7 @@ edges:
     condition: when setting up the dev environment or running the project for the first time
   - target: patterns/INDEX.md
     condition: when starting a task — check the pattern index for a matching pattern file
-last_updated: 2026-06-24
+last_updated: 2026-06-27
 ---
 
 # Session Bootstrap
@@ -36,24 +40,32 @@ The **frontend-only web UI editor is built and working** (no device wiring yet).
 - Pen uses **perfect-freehand** (`src/lib/freehand.ts` `strokeToPath`): strokes render as filled SVG ink paths (live preview + committed + thumbnail). Raw input points are stored element-local with `natW`/`natH`, so resizing scales the stroke and a tap leaves a dot. Drawings show in page thumbnails.
 - 81 tests pass (`npm test`); `npm run build` clean.
 
-**Not yet built (intentionally out of scope this pass):**
-- Device server (likely Python) that stores page state and drives the display
-- The page-state JSON contract (GET current state / POST publish) — Publish is a UI stub, no network
-- Image upload (ImageOptions is a stub; images start with empty src)
-- Display rendering on the device
+**Designed but not yet built — the device server (round two, 2026-06-27).**
+The full design is `docs/specs/2026-06-27-device-server-design.md`; the durable decisions are
+in `context/decisions.md`, the wire contract in `context/protocol.md`, the panel in
+`context/hardware.md`. In short: a **Rust + axum** device server is the single source of
+truth; it serves the editor, the API, and a `preview.png`; renders the live page to the
+panel (behind a `Display` trait, with a `WebPreview` stand-in until hardware arrives); two
+renderers (editor = rough design surface, device = authoritative, "no glaring differences").
+Not started in code.
 
-**Known limitations / follow-ups:**
-- Timeline reorder-by-drop is position-aware: dropping a tile onto another moves it to that tile's slot index (sidebar page-id drops still append). Done in `Timeline.vue`/`TimelineItem.vue`.
-- Interaction-level tests now cover a mounted pointer-drag (EditorCanvas → store), reorder-by-drop in both directions, and ToolRail's localStorage persistence wiring.
+Build order: (1) editor surgery → (2) server skeleton + API → (3) Rust renderer →
+(4) calendar feed + refresh → (5) parity guardrail → (6) Panel SPI driver (when hardware lands).
+
+**Editor surgery this design forces (NOT done yet — the code below still has the old shape):**
+- Remove `Timeline`/`TimelineItem`, `ClockWidget`/`ClockOptions`, the clock tool, clock in thumbnails, timeline reorder.
+- `DocState`: drop `timeline`/`TimelineEntry` and `ClockEl`; add `livePageId`.
+- `CalendarEl`: drop frozen `events[]`; add `feedId` + a date-only variant; add a feed picker + "Refresh now" button + a "make live" affordance.
+- Image upload still a stub (`ImageOptions`); now becomes `POST /api/images` referenced by id.
 
 **Known issues:**
 - None yet.
 
 **Open decisions** (see `context/decisions.md`):
-- Whether the web UI is served from the device or hosted elsewhere
-- Device language (Python assumed, not committed)
-- Persistence on the device and the page-state JSON schema
-- Project non-negotiables (deferred by the owner until real constraints emerge)
+- Renderer crate choices (raster, text shaping, ICS parse, image decode) — decide at implementation time.
+- OS for the Orange Pi Zero 2W (some lightweight Linux).
+- Project non-negotiables (deferred by the owner until real constraints emerge).
+- (Resolved this round: device language → Rust; hosting → from the device; persistence → plain files; page-state schema/endpoints → `context/protocol.md`.)
 
 ## Routing Table
 
@@ -62,7 +74,9 @@ Load the relevant file based on the current task. Always load `context/architect
 | Task type | Load |
 |-----------|------|
 | Understanding how the system works | `context/architecture.md` |
+| Editor↔device API (endpoints, document shape, refresh) | `context/protocol.md` |
 | Working with a specific technology | `context/stack.md` |
+| Rendering, device server, or the display panel | `context/hardware.md` |
 | Writing or reviewing code | `context/conventions.md` |
 | Making a design decision | `context/decisions.md` |
 | Setting up or running the project | `context/setup.md` |
