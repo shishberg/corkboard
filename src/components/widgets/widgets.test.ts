@@ -64,4 +64,16 @@ describe('widgets', () => {
     const svg = w.find('[data-role="drawing"]')
     expect(svg.attributes('viewBox')).toBe(`0 0 ${el.natW} ${el.natH}`)
   })
+
+  it('DrawingWidget renders a <path> with a non-empty d attribute', () => {
+    const el = makeDrawingElement(
+      [{ x: 10, y: 10 }, { x: 30, y: 20 }, { x: 50, y: 10 }],
+      'black',
+      4,
+    )
+    const w = mount(DrawingWidget, { props: { el } })
+    const path = w.find('[data-role="drawing"] path')
+    expect(path.exists()).toBe(true)
+    expect(path.attributes('d')).toBeTruthy()
+  })
 })

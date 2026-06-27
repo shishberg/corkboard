@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { DrawingEl } from '@/stores/types'
+import { strokeToPath } from '@/lib/freehand'
 
 defineProps<{ el: DrawingEl }>()
-const toPath = (points: { x: number; y: number }[]) => points.map((p) => `${p.x},${p.y}`).join(' ')
 </script>
 
 <template>
@@ -12,15 +12,12 @@ const toPath = (points: { x: number; y: number }[]) => points.map((p) => `${p.x}
     class="h-full w-full overflow-visible"
     preserveAspectRatio="none"
   >
-    <polyline
+    <path
       v-for="(s, i) in el.strokes"
       :key="i"
-      :points="toPath(s.points)"
-      fill="none"
-      :stroke="el.colour"
-      :stroke-width="s.size"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+      :d="strokeToPath(s.points, s.size)"
+      :fill="el.colour"
+      stroke="none"
     />
   </svg>
 </template>

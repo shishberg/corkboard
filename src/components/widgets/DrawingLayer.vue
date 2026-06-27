@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useToolOptionsStore } from '@/stores/toolOptions'
+import { strokeToPath } from '@/lib/freehand'
 
 const props = defineProps<{ size: { w: number; h: number }; scale: number }>()
 const emit = defineEmits<{ stroke: [points: { x: number; y: number }[]] }>()
@@ -8,7 +9,7 @@ const emit = defineEmits<{ stroke: [points: { x: number; y: number }[]] }>()
 const opts = useToolOptionsStore()
 const root = ref<HTMLElement | null>(null)
 const points = ref<{ x: number; y: number }[]>([])
-const livePath = computed(() => points.value.map((p) => `${p.x},${p.y}`).join(' '))
+const livePath = computed(() => strokeToPath(points.value, opts.penSize))
 
 function toLocal(e: PointerEvent) {
   const r = root.value?.getBoundingClientRect()
@@ -48,14 +49,11 @@ onBeforeUnmount(() => {
     @pointerdown.stop.prevent="onDown"
   >
     <svg :viewBox="`0 0 ${size.w} ${size.h}`" class="h-full w-full" preserveAspectRatio="none">
-      <polyline
-        v-if="points.length > 1"
-        :points="livePath"
-        fill="none"
-        :stroke="opts.colour"
-        :stroke-width="opts.penSize"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <path
+        v-if="livePath"
+        :d="livePath"
+        :fill="opts.colour"
+        stroke="none"
       />
     </svg>
   </div>
