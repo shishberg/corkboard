@@ -5,10 +5,9 @@ import { setActivePinia, createPinia } from 'pinia'
 import ToolRail from './ToolRail.vue'
 import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore } from '@/stores/toolOptions'
-import type { ClockEl } from '@/stores/types'
 
-function clockEl(id: string): ClockEl {
-  return { id, type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' }
+function calendarEl(id: string) {
+  return { id, type: 'calendar' as const, variant: 'week' as const, x: 0, y: 0, w: 200, h: 80, events: [], colour: 'black' as const }
 }
 
 beforeEach(() => {
@@ -17,14 +16,6 @@ beforeEach(() => {
 })
 
 describe('ToolRail', () => {
-  it('selecting the clock tool sets it active without adding an element', async () => {
-    const store = usePagesStore()
-    const w = mount(ToolRail)
-    await w.get('[data-tool="clock"]').trigger('click')
-    expect(store.activeTool).toBe('clock')
-    expect(store.selectedPage?.elements.length).toBe(0)
-  })
-
   it('selecting the select tool does not add an element', async () => {
     const store = usePagesStore()
     const w = mount(ToolRail)
@@ -35,7 +26,7 @@ describe('ToolRail', () => {
 
   it('the delete button removes the selected element and is disabled otherwise', async () => {
     const store = usePagesStore()
-    store.addElement(clockEl('e1'))
+    store.addElement(calendarEl('e1'))
     const w = mount(ToolRail)
     const del = w.get('[data-role="delete-element"]')
     await del.trigger('click')
@@ -49,10 +40,10 @@ describe('ToolRail', () => {
     mount(ToolRail)
     // ToolRail calls ensureToolOptionsPersistence() onMounted; changing an
     // option should now write through to localStorage.
-    opts.clockVariant = 'date'
+    opts.calendarVariant = 'week'
     await nextTick()
     const saved = JSON.parse(localStorage.getItem('corkboard.toolOptions') || '{}')
-    expect(saved.clockVariant).toBe('date')
+    expect(saved.calendarVariant).toBe('week')
   })
 
   it('colour panel renders 6 swatches', async () => {
@@ -71,7 +62,7 @@ describe('ToolRail', () => {
 
   it('clicking a swatch with a selection updates element colour and opts.colour', async () => {
     const store = usePagesStore()
-    store.addElement(clockEl('e1'))
+    store.addElement(calendarEl('e1'))
     expect(store.selectedElId).toBe('e1')
     const opts = useToolOptionsStore()
     const w = mount(ToolRail)
@@ -82,7 +73,7 @@ describe('ToolRail', () => {
 
   it('panel highlights the selected element colour when one is selected', async () => {
     const store = usePagesStore()
-    store.addElement({ ...clockEl('e1'), colour: 'blue' })
+    store.addElement({ ...calendarEl('e1'), colour: 'blue' })
     const w = mount(ToolRail)
     await nextTick()
     // The blue swatch should have the ring class indicating it is highlighted

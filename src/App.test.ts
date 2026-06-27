@@ -18,13 +18,13 @@ function winPointer(type: string, x: number, y: number): PointerEvent {
 }
 
 describe('App integration', () => {
-  it('drag-creates a clock element after picking the clock tool, and toggles orientation', async () => {
+  it('drag-creates a calendar element after picking the calendar tool, and toggles orientation', async () => {
     const w = mount(App, { attachTo: document.body })
     const store = usePagesStore()
 
     // Picking a tool only makes it active — nothing is added yet.
-    await w.get('[data-tool="clock"]').trigger('click')
-    expect(store.activeTool).toBe('clock')
+    await w.get('[data-tool="calendar"]').trigger('click')
+    expect(store.activeTool).toBe('calendar')
     expect(store.selectedPage?.elements.length).toBe(0)
 
     // Dragging on the canvas creates the element.
@@ -32,7 +32,7 @@ describe('App integration', () => {
     window.dispatchEvent(winPointer('pointermove', 110, 140))
     window.dispatchEvent(winPointer('pointerup', 110, 140))
     await w.vm.$nextTick()
-    expect(store.selectedPage?.elements.some((e) => e.type === 'clock')).toBe(true)
+    expect(store.selectedPage?.elements.some((e) => e.type === 'calendar')).toBe(true)
     // After creation, tool automatically switches back to select
     expect(store.activeTool).toBe('select')
 

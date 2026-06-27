@@ -4,7 +4,6 @@ import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore } from '@/stores/toolOptions'
 import { makeElement, makeDrawingElement, defaultSize } from '@/stores/elementFactory'
 import MovableElement from './MovableElement.vue'
-import ClockWidget from './widgets/ClockWidget.vue'
 import CalendarWidget from './widgets/CalendarWidget.vue'
 import ImageWidget from './widgets/ImageWidget.vue'
 import DrawingWidget from './widgets/DrawingWidget.vue'
@@ -68,7 +67,7 @@ function surfaceLocal(e: PointerEvent) {
 // --- Draw-to-place: drag on the surface to create the active tool's element ---
 let createStart = { x: 0, y: 0 }
 let createStartRaw = { x: 0, y: 0 }
-let createTool: 'clock' | 'calendar' | 'image' = 'clock'
+let createTool: 'calendar' | 'image' = 'calendar'
 let creatingId: string | null = null
 // Below this many screen pixels of movement we treat the gesture as a click,
 // not a drag. Measured in raw CSS pixels so zoom doesn't change the decision.
@@ -77,14 +76,13 @@ const CREATE_MIN = 8
 
 function onSurfacePointerDown(e: PointerEvent) {
   const tool = store.activeTool
-  if (tool === 'clock' || tool === 'calendar' || tool === 'image') {
+  if (tool === 'calendar' || tool === 'image') {
     createTool = tool
     createStart = surfaceLocal(e)
     createStartRaw = { x: e.clientX, y: e.clientY }
-    // Create the real element immediately at minimum size
     const el = makeElement(
       tool,
-      { clockVariant: opts.clockVariant, calendarVariant: opts.calendarVariant, colour: opts.colour },
+      { calendarVariant: opts.calendarVariant, colour: opts.colour },
       size.value,
       { x: createStart.x, y: createStart.y, w: CREATE_MIN, h: CREATE_MIN },
     )
@@ -163,8 +161,7 @@ function onStroke(points: { x: number; y: number }[]) {
         @select="store.selectElement($event)"
         @update="store.updateElement(el.id, $event)"
       >
-        <ClockWidget v-if="el.type === 'clock'" :el="el" />
-        <CalendarWidget v-else-if="el.type === 'calendar'" :el="el" />
+        <CalendarWidget v-if="el.type === 'calendar'" :el="el" />
         <ImageWidget v-else-if="el.type === 'image'" :el="el" />
         <DrawingWidget v-else-if="el.type === 'drawing'" :el="el" />
       </MovableElement>

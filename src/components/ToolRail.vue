@@ -6,9 +6,8 @@ import type { ToolId, EpaperColour } from '@/stores/types'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import {
-  MousePointer2, Clock, CalendarClock, Calendar, Pencil, Image as ImageIcon, Trash2,
+  MousePointer2, Calendar, Pencil, Image as ImageIcon, Trash2,
 } from '@lucide/vue'
-import ClockOptions from './ToolOptions/ClockOptions.vue'
 import CalendarOptions from './ToolOptions/CalendarOptions.vue'
 import DrawOptions from './ToolOptions/DrawOptions.vue'
 import ImageOptions from './ToolOptions/ImageOptions.vue'
@@ -16,10 +15,6 @@ import ImageOptions from './ToolOptions/ImageOptions.vue'
 const store = usePagesStore()
 const opts = useToolOptionsStore()
 onMounted(() => ensureToolOptionsPersistence())
-
-const clockGlyph = computed(() =>
-  opts.clockVariant === 'date' ? Calendar : opts.clockVariant === 'time-date' ? CalendarClock : Clock,
-)
 
 function pickTool(tool: ToolId) {
   // Selecting a tool only makes it active; elements are created by drawing on
@@ -62,21 +57,6 @@ function pickColour(c: EpaperColour) {
         </TooltipTrigger>
         <TooltipContent side="right">Select</TooltipContent>
       </Tooltip>
-
-      <!-- Clock -->
-      <Popover>
-        <PopoverTrigger as-child>
-          <button
-            data-tool="clock"
-            class="flex h-9 w-9 items-center justify-center rounded hover:bg-neutral-200"
-            :class="store.activeTool === 'clock' ? 'bg-neutral-200' : ''"
-            @click="pickTool('clock')"
-          >
-            <component :is="clockGlyph" class="h-5 w-5" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent side="right" class="w-44"><ClockOptions /></PopoverContent>
-      </Popover>
 
       <!-- Calendar -->
       <Popover>

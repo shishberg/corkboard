@@ -15,11 +15,15 @@ function winPointer(type: string, x: number, y: number): PointerEvent {
   return e as unknown as PointerEvent
 }
 
+function calendarEl(id: string) {
+  return { id, type: 'calendar' as const, variant: 'week' as const, x: 0, y: 0, w: 200, h: 80, events: [], colour: 'black' as const }
+}
+
 describe('EditorCanvas', () => {
   it('dragging a movable element updates its position in the store', async () => {
     const store = usePagesStore()
     store.setActiveTool('select')
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
+    store.addElement(calendarEl('e1'))
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
     // Dispatch the pointerdown directly: test-utils' trigger builds a real
@@ -35,7 +39,7 @@ describe('EditorCanvas', () => {
 
   it('renders one MovableElement per element on the selected page', async () => {
     const store = usePagesStore()
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
+    store.addElement(calendarEl('e1'))
     const w = mount(EditorCanvas, { global: { plugins: [] } })
     await w.vm.$nextTick()
     expect(w.findAll('[data-role="movable"]').length).toBe(1)
@@ -43,7 +47,7 @@ describe('EditorCanvas', () => {
 
   it('Backspace deletes the selected element', async () => {
     const store = usePagesStore()
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
+    store.addElement(calendarEl('e1'))
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace' }))
@@ -53,7 +57,7 @@ describe('EditorCanvas', () => {
 
   it('Delete key deletes the selected element', async () => {
     const store = usePagesStore()
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
+    store.addElement(calendarEl('e1'))
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
@@ -63,7 +67,7 @@ describe('EditorCanvas', () => {
 
   it('drag-creates an element of the active tool at the dragged rect', async () => {
     const store = usePagesStore()
-    store.setActiveTool('clock')
+    store.setActiveTool('calendar')
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
     // jsdom getBoundingClientRect is all-zero and scale stays 1, so client
@@ -74,7 +78,7 @@ describe('EditorCanvas', () => {
     await nextTick()
     const els = store.selectedPage?.elements ?? []
     expect(els.length).toBe(1)
-    expect(els[0].type).toBe('clock')
+    expect(els[0].type).toBe('calendar')
     expect({ x: els[0].x, y: els[0].y, w: els[0].w, h: els[0].h }).toEqual({ x: 10, y: 20, w: 100, h: 120 })
     // After creating, tool switches to select
     expect(store.activeTool).toBe('select')
@@ -117,7 +121,7 @@ describe('EditorCanvas', () => {
 
   it('clears selection when the empty surface is clicked', async () => {
     const store = usePagesStore()
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 0, y: 0, w: 200, h: 80, colour: 'black' as const })
+    store.addElement(calendarEl('e1'))
     expect(store.selectedElId).toBe('e1')
     const w = mount(EditorCanvas)
     await w.get('[data-role="surface"]').trigger('pointerdown')
@@ -169,8 +173,8 @@ describe('EditorCanvas', () => {
   it('with a creation tool active, pointerdown on an existing element creates a NEW element', async () => {
     const store = usePagesStore()
     // Pre-place an existing element
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 50, y: 50, w: 200, h: 80, colour: 'black' as const })
-    store.setActiveTool('clock')
+    store.addElement(calendarEl('e1'))
+    store.setActiveTool('calendar')
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
 
@@ -191,10 +195,10 @@ describe('EditorCanvas', () => {
 
   it('creation tool: movable has pointer-events:none; select tool: movable has no pointer-events restriction', async () => {
     const store = usePagesStore()
-    store.addElement({ id: 'e1', type: 'clock', variant: 'time', x: 50, y: 50, w: 200, h: 80, colour: 'black' as const })
+    store.addElement(calendarEl('e1'))
 
     // With a creation tool active
-    store.setActiveTool('clock')
+    store.setActiveTool('calendar')
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
     const movable = w.get('[data-role="movable"]')
@@ -210,7 +214,7 @@ describe('EditorCanvas', () => {
 
   it('pointercancel during live creation finalises the element without leaking listeners', async () => {
     const store = usePagesStore()
-    store.setActiveTool('clock')
+    store.setActiveTool('calendar')
     const w = mount(EditorCanvas, { attachTo: document.body })
     await nextTick()
 

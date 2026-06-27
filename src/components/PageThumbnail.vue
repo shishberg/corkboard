@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { usePagesStore } from '@/stores/pages'
-import ClockWidget from './widgets/ClockWidget.vue'
 import CalendarWidget from './widgets/CalendarWidget.vue'
 import ImageWidget from './widgets/ImageWidget.vue'
 import DrawingWidget from './widgets/DrawingWidget.vue'
@@ -36,8 +35,7 @@ function onDragStart(e: DragEvent) {
         class="absolute"
         :style="{ left: `${el.x}px`, top: `${el.y}px`, width: `${el.w}px`, height: `${el.h}px` }"
       >
-        <ClockWidget v-if="el.type === 'clock'" :el="el" />
-        <CalendarWidget v-else-if="el.type === 'calendar'" :el="el" />
+        <CalendarWidget v-if="el.type === 'calendar'" :el="el" />
         <ImageWidget v-else-if="el.type === 'image'" :el="el" />
         <DrawingWidget v-else-if="el.type === 'drawing'" :el="el" />
       </div>
