@@ -7,7 +7,7 @@ import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore } from '@/stores/toolOptions'
 
 function calendarEl(id: string) {
-  return { id, type: 'calendar' as const, variant: 'week' as const, x: 0, y: 0, w: 200, h: 80, events: [], colour: 'black' as const }
+  return { id, type: 'calendar' as const, variant: 'week' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const }
 }
 
 beforeEach(() => {

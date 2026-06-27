@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { makeElement, makeDrawingElement } from './elementFactory'
 
-const opts = { calendarVariant: 'week' as const, colour: 'red' as const }
+const opts = { calendarVariant: 'week' as const, colour: 'red' as const, feedId: 'family' }
 const size = { w: 800, h: 480 }
 
 describe('makeElement', () => {
-  it('makes a calendar element using the option variant', () => {
+  it('makes a calendar element using the option variant and feedId', () => {
     const el = makeElement('calendar', opts, size)
     expect(el.type).toBe('calendar')
     if (el.type === 'calendar') {
       expect(el.variant).toBe('week')
-      expect(el.events).toEqual([])
+      expect(el.feedId).toBe('family')
     }
   })
 

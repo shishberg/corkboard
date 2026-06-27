@@ -4,15 +4,17 @@ import type { EpaperColour } from './types'
 const KEY = 'corkboard.toolOptions'
 
 interface ToolOptionsState {
-  calendarVariant: 'today' | 'week'
+  calendarVariant: 'date' | 'today' | 'week'
   colour: EpaperColour
   penSize: number
+  feedId: string
 }
 
 const defaults: ToolOptionsState = {
   calendarVariant: 'today',
   colour: 'black',
   penSize: 4,
+  feedId: '',
 }
 
 function load(): ToolOptionsState {
@@ -27,6 +29,7 @@ function load(): ToolOptionsState {
       calendarVariant: (parsed.calendarVariant ?? defaults.calendarVariant) as ToolOptionsState['calendarVariant'],
       colour,
       penSize: (parsed.penSize ?? defaults.penSize) as ToolOptionsState['penSize'],
+      feedId: (parsed.feedId ?? defaults.feedId) as ToolOptionsState['feedId'],
     }
   } catch {
     return { ...defaults }

@@ -4,8 +4,9 @@ let counter = 0
 const uid = () => `el-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
 interface FactoryOpts {
-  calendarVariant: 'today' | 'week'
+  calendarVariant: 'date' | 'today' | 'week'
   colour: EpaperColour
+  feedId: string
 }
 
 interface Rect {
@@ -35,7 +36,7 @@ export function makeElement(
   const base = { id: uid(), ...geom, colour: opts.colour }
   switch (tool) {
     case 'calendar':
-      return { ...base, type: 'calendar', variant: opts.calendarVariant, events: [] }
+      return { ...base, type: 'calendar', variant: opts.calendarVariant, feedId: opts.feedId }
     case 'image':
       return { ...base, type: 'image', src: '' }
   }

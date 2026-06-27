@@ -82,7 +82,7 @@ function onSurfacePointerDown(e: PointerEvent) {
     createStartRaw = { x: e.clientX, y: e.clientY }
     const el = makeElement(
       tool,
-      { calendarVariant: opts.calendarVariant, colour: opts.colour },
+      { calendarVariant: opts.calendarVariant, colour: opts.colour, feedId: opts.feedId },
       size.value,
       { x: createStart.x, y: createStart.y, w: CREATE_MIN, h: CREATE_MIN },
     )

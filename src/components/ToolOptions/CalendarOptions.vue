@@ -1,11 +1,20 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { useToolOptionsStore } from '@/stores/toolOptions'
+import { useFeedsStore } from '@/stores/feeds'
 
 const opts = useToolOptionsStore()
+const feeds = useFeedsStore()
+
 const variants = [
+  { id: 'date', label: 'Date' },
   { id: 'today', label: 'Today' },
   { id: 'week', label: 'Week' },
 ] as const
+
+onMounted(() => {
+  feeds.loadFeeds()
+})
 </script>
 
 <template>
@@ -20,5 +29,15 @@ const variants = [
     >
       {{ v.label }}
     </button>
+    <p class="mb-1 mt-2 text-xs font-medium text-neutral-500">Feed</p>
+    <select
+      data-role="feed-select"
+      class="rounded border px-1 py-1 text-sm"
+      :value="opts.feedId"
+      @change="opts.feedId = ($event.target as HTMLSelectElement).value"
+    >
+      <option value="">(none)</option>
+      <option v-for="feed in feeds.feeds" :key="feed.id" :value="feed.id">{{ feed.name }}</option>
+    </select>
   </div>
 </template>

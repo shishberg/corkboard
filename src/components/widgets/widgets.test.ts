@@ -4,20 +4,35 @@ import CalendarWidget from './CalendarWidget.vue'
 import ImageWidget from './ImageWidget.vue'
 import DrawingWidget from './DrawingWidget.vue'
 import { makeDrawingElement } from '@/stores/elementFactory'
+import { formatSampleDate } from '@/lib/sampleCalendar'
 import type { CalendarEl, ImageEl } from '@/stores/types'
 
 describe('widgets', () => {
   it('CalendarWidget renders a week layout with 7 day cells', () => {
-    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'week', x: 0, y: 0, w: 300, h: 200, events: [], colour: 'black' }
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'week', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black' }
     const w = mount(CalendarWidget, { props: { el } })
     expect(w.findAll('[data-role="day"]').length).toBe(7)
   })
 
   it('CalendarWidget applies element colour as text colour', () => {
-    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'today', x: 0, y: 0, w: 300, h: 200, events: [], colour: 'blue' }
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'today', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'blue' }
     const w = mount(CalendarWidget, { props: { el } })
     const style = w.find('[data-role="calendar-root"]').attributes('style') ?? ''
     expect(style).toContain('color: blue')
+  })
+
+  it('CalendarWidget today variant shows 3 sample events', () => {
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'today', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black' }
+    const w = mount(CalendarWidget, { props: { el } })
+    expect(w.findAll('[data-role="event"]').length).toBe(3)
+  })
+
+  it('CalendarWidget date variant shows the formatted sample date', () => {
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'date', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black' }
+    const w = mount(CalendarWidget, { props: { el } })
+    const dateEl = w.find('[data-role="calendar-date"]')
+    expect(dateEl.exists()).toBe(true)
+    expect(dateEl.text()).toContain(formatSampleDate())
   })
 
   it('ImageWidget shows a placeholder when src is empty', () => {

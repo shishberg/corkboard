@@ -3,14 +3,24 @@ import { ref } from 'vue'
 import { usePagesStore } from '@/stores/pages'
 import { Button } from '@/components/ui/button'
 import { RectangleHorizontal, RectangleVertical } from '@lucide/vue'
+import { refreshNow } from '@/lib/deviceApi'
 
 const store = usePagesStore()
 const toast = ref<string | null>(null)
 
+function showToast(msg: string) {
+  toast.value = msg
+  setTimeout(() => (toast.value = null), 1500)
+}
+
 function publish() {
   // Stubbed this pass — no network call.
-  toast.value = 'Published (stub)'
-  setTimeout(() => (toast.value = null), 1500)
+  showToast('Published (stub)')
+}
+
+async function handleRefresh() {
+  const ok = await refreshNow()
+  showToast(ok ? 'Refreshing…' : 'Device offline')
 }
 </script>
 
@@ -27,6 +37,7 @@ function publish() {
         <component :is="store.orientation === 'landscape' ? RectangleHorizontal : RectangleVertical" class="h-4 w-4" />
         {{ store.orientation }}
       </button>
+      <Button data-role="refresh" size="sm" variant="outline" @click="handleRefresh">Refresh now</Button>
       <Button data-role="publish" size="sm" @click="publish">Publish</Button>
     </div>
   </header>
