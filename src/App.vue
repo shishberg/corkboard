@@ -3,7 +3,6 @@ import TopBar from './components/TopBar.vue'
 import PageSidebar from './components/PageSidebar.vue'
 import ToolRail from './components/ToolRail.vue'
 import EditorCanvas from './components/EditorCanvas.vue'
-import Timeline from './components/Timeline.vue'
 </script>
 
 <template>
@@ -16,6 +15,5 @@ import Timeline from './components/Timeline.vue'
         <EditorCanvas />
       </div>
     </div>
-    <Timeline />
   </div>
 </template>
