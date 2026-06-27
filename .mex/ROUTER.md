@@ -38,7 +38,7 @@ The **frontend-only web UI editor is built and working** (no device wiring yet).
 - Element creation is live draw-to-place: picking calendar/image only sets the active tool; pressing on the canvas creates the real element immediately and the drag sizes it (a click drops a default size), then the tool auto-switches back to select. Creation tools always create — elements are pointer-events:none unless the select tool is active, so only select selects. Backspace/Delete (or the ToolRail trash button) deletes the selected element.
 - Colour is one global current colour shown as a swatch panel below the tools in `ToolRail` (`colour` in toolOptions; `colour` on every `BaseEl`). It drives calendar text and pen ink; selecting an element reflects its colour in the panel and clicking a swatch recolours it (`store.setElementColour`).
 - Pen uses **perfect-freehand** (`src/lib/freehand.ts` `strokeToPath`): strokes render as filled SVG ink paths (live preview + committed + thumbnail). Raw input points are stored element-local with `natW`/`natH`, so resizing scales the stroke and a tap leaves a dot. Drawings show in page thumbnails.
-- 67 tests pass (`npm test`); `npm run build` clean.
+- 137 tests pass (`npm test`); `npm run build` clean. Editor is fully on the round-two model (calendar feed-ref, text+fonts, livePageId/make-live).
 
 **Designed but not yet built — the device server (round two, 2026-06-27).**
 The full design is `docs/specs/2026-06-27-device-server-design.md`; the durable decisions are
@@ -52,12 +52,12 @@ Not started in code.
 Build order: (1) editor surgery → (2) server skeleton + API → (3) Rust renderer →
 (4) calendar feed + refresh → (5) parity guardrail → (6) Panel SPI driver (when hardware lands).
 
-**Editor surgery — split into plans 1a–1d (`docs/plans/`):**
-- **1a — DONE:** removed `Timeline`/`TimelineItem`, `ClockWidget`/`ClockOptions`, the clock tool, clock in thumbnails, timeline reorder; `DocState` dropped `timeline`/`TimelineEntry` and `ClockEl` and gained `livePageId`; factory/tool-options dropped `clockVariant`.
-- **1b — TODO (plan not yet written):** `CalendarEl` drops frozen `events[]` (still present today, factory sets `events: []`) for `feedId` + variant incl. a `date` variant; `CalendarOptions` gets a feed picker (stub list) + a "Refresh now" button; `CalendarWidget` renders the date + sample events.
-- **1c — TODO (plan not yet written):** new `TextEl` + `text` tool, `TextWidget`/`TextOptions`, on-canvas (in-place) text editing, font picker over the bundled font manifest.
-- **1d — TODO (plan not yet written):** a "make page live" affordance in `PageSidebar`/`PageThumbnail` driving `livePageId`, with the live page marked. **Must add a `deletePage` that reassigns `livePageId`** when the live page is removed (final-review Minor 1).
-- Image upload still a stub (`ImageOptions`); later becomes `POST /api/images` referenced by id.
+**Editor surgery — DONE (plans 1a–1d, all implemented; 137 tests green, build clean):**
+- **1a:** removed clock + timeline (components + store API); `DocState` gained `livePageId`; factory/tool-options dropped `clockVariant`.
+- **1b:** `CalendarEl` now `{ variant: 'date'|'today'|'week'; feedId: string }` (NO embedded events). `useFeedsStore` (stub `[{id:'family',name:'Family'}]`, tolerant `loadFeeds()`); tolerant `src/lib/deviceApi.ts` (`fetchFeeds`/`refreshNow`, relative URLs, swallows errors — editor tolerates an offline device); deterministic `src/lib/sampleCalendar.ts` for preview; CalendarOptions feed picker + date variant; "Refresh now" in TopBar.
+- **1c:** `TextEl` (`text`/`font`/`align`) + `text` tool; `TextWidget` on-canvas editing via an **uncontrolled contenteditable** (imperative `textContent`, focus-guarded watch — do NOT reactively interpolate into a contenteditable, it resets the caret); `TextOptions` font picker + align; `src/lib/fonts.ts` manifest loader + `injectFontFaces`; bundled fonts at `public/fonts/` (served at `/fonts/`), manifest `public/fonts/manifest.json`. **Seed = Atkinson Hyperlegible only** (Regular+Bold static TTFs); Inter/Caveat deferred (google/fonts only ships them variable; design needs static for parity).
+- **1d:** make-live UI in `PageSidebar` (Make-live button + Live badge, ring=selected vs border=live so both show) + `deletePage` that reassigns `livePageId`/`selectedPageId` when the live/selected page is removed (no-op on last page).
+- Still a stub: image upload (`ImageOptions`) — becomes `POST /api/images` (id-referenced) when the device server lands.
 
 **Known issues:**
 - None yet.
