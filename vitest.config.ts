@@ -12,6 +12,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
+    // Exclude the Playwright parity tests — they run via `npm run test:parity`, not vitest.
+    exclude: ['tests/**', 'node_modules/**'],
     environmentOptions: {
       jsdom: {
         url: 'http://localhost/',
