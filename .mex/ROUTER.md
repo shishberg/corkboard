@@ -30,14 +30,16 @@ The **frontend-only web UI editor is built and working** (no device wiring yet).
 **Working:**
 - Web UI editor (Vite + Vue 3 + TS + Pinia + Tailwind v4 + shadcn-vue), frontend-only. App shell in `src/App.vue`: TopBar, PageSidebar, ToolRail, EditorCanvas, Timeline.
 - Document state in `usePagesStore` (`src/stores/pages.ts`) — pages, elements, timeline, orientation, selection; this Pinia shape is the draft page-state contract.
-- Persisted tool options (`src/stores/toolOptions.ts`, localStorage), element factory, hand-rolled drag/resize (`useDraggableResizable` + `MovableElement`), widgets (Clock/Calendar/Image + DrawingLayer placeholder).
-- 46 tests pass (`npm test`); `npm run build` clean.
+- Persisted tool options (`src/stores/toolOptions.ts`, localStorage), element factory, hand-rolled drag/resize (`useDraggableResizable` + `MovableElement`), widgets (Clock/Calendar/Image with size-scaled fonts; pen via DrawingLayer/DrawingWidget).
+- Element creation is live draw-to-place: picking clock/calendar/image only sets the active tool; pressing on the canvas creates the real element immediately and the drag sizes it (a click drops a default size), then the tool auto-switches back to select. Creation tools always create — elements are pointer-events:none unless the select tool is active, so only select selects. Backspace/Delete (or the ToolRail trash button) deletes the selected element.
+- Colour is one global current colour shown as a swatch panel below the tools in `ToolRail` (`colour` in toolOptions; `colour` on every `BaseEl`). It drives clock/calendar text and pen ink; selecting an element reflects its colour in the panel and clicking a swatch recolours it (`store.setElementColour`).
+- Pen uses **perfect-freehand** (`src/lib/freehand.ts` `strokeToPath`): strokes render as filled SVG ink paths (live preview + committed + thumbnail). Raw input points are stored element-local with `natW`/`natH`, so resizing scales the stroke and a tap leaves a dot. Drawings show in page thumbnails.
+- 81 tests pass (`npm test`); `npm run build` clean.
 
 **Not yet built (intentionally out of scope this pass):**
 - Device server (likely Python) that stores page state and drives the display
 - The page-state JSON contract (GET current state / POST publish) — Publish is a UI stub, no network
 - Image upload (ImageOptions is a stub; images start with empty src)
-- Real drawing/stroke capture (DrawingLayer is a transparent placeholder)
 - Display rendering on the device
 
 **Known limitations / follow-ups:**
