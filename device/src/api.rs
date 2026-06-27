@@ -104,14 +104,9 @@ async fn refresh(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse
     Ok(Json(json!({"ok": true})))
 }
 
+/// Return the cached rendered PNG — does NOT re-render.
 async fn preview_png(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let doc = state.document.lock().unwrap().clone();
-    let cfg = state.config.lock().unwrap().clone();
-    let png = match crate::render::render(&doc, &cfg) {
-        Ok(p) => p,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
-
+    let png = state.web_preview.current();
     let mut response = png.into_response();
     response
         .headers_mut()
@@ -143,6 +138,7 @@ mod tests {
     use crate::{
         display::WebPreview,
         document::Document,
+        fonts::Fonts,
         state::AppState,
         storage::Storage,
     };
@@ -153,18 +149,19 @@ mod tests {
 
     fn make_state() -> Arc<AppState> {
         let dir = tempfile::tempdir().unwrap();
-        // Leak the dir so it stays alive for the test
         let path = dir.keep();
         let storage = Storage::new(&path);
         let config = storage.load_config();
         let document = Document::default();
-        let display = Arc::new(WebPreview::new());
+        let preview = Arc::new(WebPreview::new());
 
         Arc::new(AppState {
             storage,
             config: Mutex::new(config),
             document: Mutex::new(document),
-            display,
+            display: preview.clone(),
+            web_preview: preview,
+            fonts: Arc::new(Fonts::load()),
         })
     }
 
@@ -303,5 +300,36 @@ mod tests {
 
         let resp = make_router(state).oneshot(get_req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn preview_png_serves_cached_bytes() {
+        let state = make_state();
+        let app = make_router(state.clone());
+
+        // PUT a document to trigger render
+        let doc = Document::default();
+        let doc_json = serde_json::to_string(&doc).unwrap();
+        let put_req = Request::builder()
+            .method("PUT")
+            .uri("/api/document")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(doc_json))
+            .unwrap();
+        let resp = app.clone().oneshot(put_req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // GET /preview.png
+        let preview_req = Request::builder()
+            .method("GET")
+            .uri("/preview.png")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let resp = make_router(state.clone()).oneshot(preview_req).await.unwrap();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+
+        // Must match what's cached in web_preview
+        let cached = state.web_preview.current();
+        assert_eq!(body.as_ref(), cached.as_slice());
     }
 }

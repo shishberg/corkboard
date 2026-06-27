@@ -2,13 +2,17 @@ mod api;
 mod config;
 mod display;
 mod document;
+mod fonts;
 mod render;
+mod sample;
 mod state;
 mod storage;
+mod text;
 
 use std::sync::{Arc, Mutex};
 
 use display::WebPreview;
+use fonts::Fonts;
 use state::AppState;
 use storage::Storage;
 use tower_http::services::{ServeDir, ServeFile};
@@ -28,12 +32,15 @@ async fn main() {
         .unwrap_or_else(|_| document::Document::default());
 
     let preview = Arc::new(WebPreview::new());
+    let fonts = Arc::new(Fonts::load());
 
     let state = Arc::new(AppState {
         storage,
         config: Mutex::new(config),
         document: Mutex::new(document),
-        display: preview,
+        display: preview.clone(),
+        web_preview: preview,
+        fonts,
     });
 
     if let Err(e) = state.render_and_show() {

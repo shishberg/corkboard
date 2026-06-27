@@ -5,7 +5,6 @@ pub trait Display: Send + Sync {
 }
 
 pub struct WebPreview {
-    #[allow(dead_code)]
     latest: std::sync::Mutex<Vec<u8>>,
 }
 
@@ -16,7 +15,6 @@ impl WebPreview {
         }
     }
 
-    #[allow(dead_code)]
     pub fn current(&self) -> Vec<u8> {
         let data = self.latest.lock().unwrap();
         if data.is_empty() {
@@ -35,7 +33,6 @@ impl Display for WebPreview {
     }
 }
 
-#[allow(dead_code)]
 fn blank_white_png() -> Vec<u8> {
     use image::{codecs::png::PngEncoder, ImageEncoder, RgbImage};
     let img = RgbImage::from_pixel(1, 1, image::Rgb([255u8, 255u8, 255u8]));
