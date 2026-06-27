@@ -83,6 +83,17 @@ export const usePagesStore = defineStore('pages', {
         if (h !== undefined) el.h = h
       }
     },
+    deletePage(id: string) {
+      if (this.pages.length <= 1) return
+      const i = this.pages.findIndex((p) => p.id === id)
+      if (i === -1) return
+      this.pages.splice(i, 1)
+      if (this.livePageId === id) this.livePageId = this.pages[0].id
+      if (this.selectedPageId === id) {
+        this.selectedPageId = this.pages[0].id
+        this.selectedElId = null
+      }
+    },
     setLivePage(id: string) {
       if (!this.pages.some((p) => p.id === id)) return
       this.livePageId = id

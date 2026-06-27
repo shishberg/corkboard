@@ -29,4 +29,39 @@ describe('PageSidebar', () => {
     await w.findAll('[data-role="thumb"]')[1].trigger('click')
     expect(store.selectedPageId).toBe(second)
   })
+
+  it('the live page shows a live-badge; non-live pages show a make-live button', () => {
+    const store = usePagesStore()
+    store.addPage()
+    // pages[0] is live by default
+    const w = mount(PageSidebar)
+    const thumbs = w.findAll('[data-role="thumb"]')
+    expect(thumbs[0].find('[data-role="live-badge"]').exists()).toBe(true)
+    expect(thumbs[0].find('[data-role="make-live"]').exists()).toBe(false)
+    expect(thumbs[1].find('[data-role="live-badge"]').exists()).toBe(false)
+    expect(thumbs[1].find('[data-role="make-live"]').exists()).toBe(true)
+  })
+
+  it('clicking make-live on a non-live page sets store.livePageId to that page', async () => {
+    const store = usePagesStore()
+    const b = store.addPage()
+    const w = mount(PageSidebar)
+    const thumbs = w.findAll('[data-role="thumb"]')
+    await thumbs[1].find('[data-role="make-live"]').trigger('click')
+    expect(store.livePageId).toBe(b)
+  })
+
+  it('clicking delete-page removes that page from store.pages', async () => {
+    const store = usePagesStore()
+    const b = store.addPage()
+    const w = mount(PageSidebar)
+    const thumbs = w.findAll('[data-role="thumb"]')
+    await thumbs[1].find('[data-role="delete-page"]').trigger('click')
+    expect(store.pages.some((p) => p.id === b)).toBe(false)
+  })
+
+  it('with one page, no delete-page button is rendered', () => {
+    const w = mount(PageSidebar)
+    expect(w.find('[data-role="delete-page"]').exists()).toBe(false)
+  })
 })

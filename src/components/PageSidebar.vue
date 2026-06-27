@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { usePagesStore } from '@/stores/pages'
 import PageThumbnail from './PageThumbnail.vue'
-import { Plus } from '@lucide/vue'
+import { Plus, X } from '@lucide/vue'
 
 const store = usePagesStore()
 </script>
@@ -13,11 +13,33 @@ const store = usePagesStore()
       :key="p.id"
       data-role="thumb"
       class="cursor-pointer rounded p-0.5"
-      :class="store.selectedPageId === p.id ? 'ring-2 ring-blue-500' : ''"
+      :class="[
+        store.selectedPageId === p.id ? 'ring-2 ring-blue-500' : '',
+        store.livePageId === p.id ? 'ring-2 ring-green-500' : '',
+      ]"
       @click="store.selectPage(p.id)"
     >
       <PageThumbnail :page-id="p.id" />
       <p class="mt-0.5 truncate text-center text-xs text-neutral-600">{{ p.name }}</p>
+      <div class="mt-0.5 flex items-center justify-between gap-1">
+        <span
+          v-if="store.livePageId === p.id"
+          data-role="live-badge"
+          class="rounded-full bg-green-500 px-1.5 py-0.5 text-xs font-medium text-white"
+        >Live</span>
+        <button
+          v-else
+          data-role="make-live"
+          class="rounded bg-neutral-200 px-1.5 py-0.5 text-xs hover:bg-green-100"
+          @click.stop="store.setLivePage(p.id)"
+        >Make live</button>
+        <button
+          v-if="store.pages.length > 1"
+          data-role="delete-page"
+          class="rounded p-0.5 text-neutral-400 hover:bg-neutral-200 hover:text-neutral-700"
+          @click.stop="store.deletePage(p.id)"
+        ><X class="h-3 w-3" /></button>
+      </div>
     </div>
     <button
       data-role="add-page"

@@ -194,6 +194,72 @@ describe('usePagesStore', () => {
     expect(s.selectedPage?.elements[0].type).toBe('image')
   })
 
+  // deletePage
+  it('deletePage removes a page (length drops, page is gone)', () => {
+    const s = usePagesStore()
+    const b = s.addPage()
+    expect(s.pages.length).toBe(2)
+    s.deletePage(b)
+    expect(s.pages.length).toBe(1)
+    expect(s.pages.some((p) => p.id === b)).toBe(false)
+  })
+
+  it('deletePage reassigns livePageId when the live page is deleted', () => {
+    const s = usePagesStore()
+    const b = s.addPage()
+    s.setLivePage(b)
+    expect(s.livePageId).toBe(b)
+    s.deletePage(b)
+    expect(s.pages.length).toBe(1)
+    expect(s.livePageId).toBe(s.pages[0].id)
+    expect(s.livePage?.id).toBe(s.pages[0].id)
+  })
+
+  it('deletePage reassigns selectedPageId and clears selectedElId when selected page is deleted', () => {
+    const s = usePagesStore()
+    const a = s.pages[0].id
+    const b = s.addPage()
+    // Select page b and add an element to it
+    s.selectPage(b)
+    s.addElement(imageEl('e1'))
+    expect(s.selectedPageId).toBe(b)
+    expect(s.selectedElId).toBe('e1')
+    // Delete b — selection should fall back to first remaining page
+    s.deletePage(b)
+    expect(s.selectedPageId).toBe(a)
+    expect(s.selectedElId).toBe(null)
+  })
+
+  it('deletePage leaves livePageId and selectedPageId unchanged when they point at a different page', () => {
+    const s = usePagesStore()
+    const a = s.pages[0].id
+    s.addPage()
+    const c = s.addPage()
+    s.setLivePage(a)
+    s.selectPage(a)
+    // Delete page c which is neither live nor selected
+    s.deletePage(c)
+    expect(s.livePageId).toBe(a)
+    expect(s.selectedPageId).toBe(a)
+  })
+
+  it('deletePage is a no-op when only one page remains', () => {
+    const s = usePagesStore()
+    expect(s.pages.length).toBe(1)
+    const id = s.pages[0].id
+    s.deletePage(id)
+    expect(s.pages.length).toBe(1)
+    expect(s.livePageId).toBe(id)
+  })
+
+  it('deletePage is a no-op for an unknown id', () => {
+    const s = usePagesStore()
+    s.addPage()
+    const before = s.pages.length
+    s.deletePage('ghost')
+    expect(s.pages.length).toBe(before)
+  })
+
   it('setElementColour on a drawing element also updates each stroke colour', () => {
     const s = usePagesStore()
     const drawing: DrawingEl = {
