@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { DocState, El, Page, ToolId, BaseEl, EpaperColour } from './types'
+import type { DocState, El, Page, ToolId, BaseEl, EpaperColour, TextEl } from './types'
 
 let counter = 0
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`
@@ -95,6 +95,24 @@ export const usePagesStore = defineStore('pages', {
       if (el.type === 'drawing') {
         for (const stroke of el.strokes) stroke.colour = colour
       }
+    },
+    setElementText(id: string, text: string) {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      const el = page?.elements.find((e) => e.id === id)
+      if (!el || el.type !== 'text') return
+      ;(el as TextEl).text = text
+    },
+    setElementFont(id: string, font: string) {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      const el = page?.elements.find((e) => e.id === id)
+      if (!el || el.type !== 'text') return
+      ;(el as TextEl).font = font
+    },
+    setElementAlign(id: string, align: 'left' | 'center') {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      const el = page?.elements.find((e) => e.id === id)
+      if (!el || el.type !== 'text') return
+      ;(el as TextEl).align = align
     },
   },
 })

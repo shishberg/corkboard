@@ -1,4 +1,4 @@
-import type { El, DrawingEl, EpaperColour } from './types'
+import type { El, DrawingEl, EpaperColour, TextEl } from './types'
 
 let counter = 0
 const uid = () => `el-${Date.now().toString(36)}-${(counter++).toString(36)}`
@@ -7,6 +7,8 @@ interface FactoryOpts {
   calendarVariant: 'date' | 'today' | 'week'
   colour: EpaperColour
   feedId: string
+  font: string
+  align: 'left' | 'center'
 }
 
 interface Rect {
@@ -19,14 +21,15 @@ interface Rect {
 const SIZES = {
   calendar: { w: 300, h: 220 },
   image: { w: 200, h: 150 },
+  text: { w: 240, h: 80 },
 }
 
-export function defaultSize(tool: 'calendar' | 'image'): { w: number; h: number } {
+export function defaultSize(tool: 'calendar' | 'image' | 'text'): { w: number; h: number } {
   return { ...SIZES[tool] }
 }
 
 export function makeElement(
-  tool: 'calendar' | 'image',
+  tool: 'calendar' | 'image' | 'text',
   opts: FactoryOpts,
   pageSize: { w: number; h: number },
   rect?: Rect,
@@ -39,6 +42,8 @@ export function makeElement(
       return { ...base, type: 'calendar', variant: opts.calendarVariant, feedId: opts.feedId }
     case 'image':
       return { ...base, type: 'image', src: '' }
+    case 'text':
+      return { ...base, type: 'text', text: 'Text', font: opts.font, align: opts.align } satisfies TextEl
   }
 }
 

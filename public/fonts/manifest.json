@@ -1,0 +1,13 @@
+{
+  "fonts": [
+    {
+      "id": "atkinson-hyperlegible",
+      "name": "Atkinson Hyperlegible",
+      "default": true,
+      "faces": [
+        { "weight": 400, "style": "normal", "file": "atkinson-hyperlegible/Regular.ttf" },
+        { "weight": 700, "style": "normal", "file": "atkinson-hyperlegible/Bold.ttf" }
+      ]
+    }
+  ]
+}

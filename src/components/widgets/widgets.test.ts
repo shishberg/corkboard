@@ -1,11 +1,18 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
+import { usePagesStore } from '@/stores/pages'
 import CalendarWidget from './CalendarWidget.vue'
 import ImageWidget from './ImageWidget.vue'
 import DrawingWidget from './DrawingWidget.vue'
+import TextWidget from './TextWidget.vue'
 import { makeDrawingElement } from '@/stores/elementFactory'
 import { formatSampleDate } from '@/lib/sampleCalendar'
-import type { CalendarEl, ImageEl } from '@/stores/types'
+import type { CalendarEl, ImageEl, TextEl } from '@/stores/types'
+
+beforeEach(() => {
+  setActivePinia(createPinia())
+})
 
 describe('widgets', () => {
   it('CalendarWidget renders a week layout with 7 day cells', () => {
@@ -61,5 +68,94 @@ describe('widgets', () => {
     const path = w.find('[data-role="drawing"] path')
     expect(path.exists()).toBe(true)
     expect(path.attributes('d')).toBeTruthy()
+  })
+})
+
+describe('TextWidget', () => {
+  const sampleEl: TextEl = {
+    id: 'text1',
+    type: 'text',
+    x: 0,
+    y: 0,
+    w: 240,
+    h: 80,
+    colour: 'black',
+    text: 'Hello world',
+    font: 'atkinson-hyperlegible',
+    align: 'left',
+  }
+
+  it('renders the element text inside data-role="text-root"', () => {
+    const w = mount(TextWidget, { props: { el: sampleEl } })
+    const root = w.find('[data-role="text-root"]')
+    expect(root.exists()).toBe(true)
+    expect(root.text()).toContain('Hello world')
+  })
+
+  it('applies font-family from el.font', () => {
+    const w = mount(TextWidget, { props: { el: sampleEl } })
+    const edit = w.find('[data-role="text-edit"]')
+    expect(edit.attributes('style')).toContain('atkinson-hyperlegible')
+  })
+
+  it('applies text-align from el.align', () => {
+    const el: TextEl = { ...sampleEl, align: 'center' }
+    const w = mount(TextWidget, { props: { el } })
+    const edit = w.find('[data-role="text-edit"]')
+    expect(edit.attributes('style')).toContain('center')
+  })
+
+  it('is NOT editable when element is not selected', () => {
+    // activePinia is fresh; selectedElId is null, activeTool defaults to 'select'
+    const w = mount(TextWidget, { props: { el: sampleEl } })
+    const edit = w.find('[data-role="text-edit"]')
+    expect(edit.attributes('contenteditable')).toBe('false')
+  })
+
+  it('is NOT editable when a different element is selected', () => {
+    const store = usePagesStore()
+    store.selectedElId = 'other-id'
+    const w = mount(TextWidget, { props: { el: sampleEl } })
+    const edit = w.find('[data-role="text-edit"]')
+    expect(edit.attributes('contenteditable')).toBe('false')
+  })
+
+  it('is editable when this element is selected and select tool is active', () => {
+    const store = usePagesStore()
+    store.selectedElId = sampleEl.id
+    store.activeTool = 'select'
+    const w = mount(TextWidget, { props: { el: sampleEl } })
+    const edit = w.find('[data-role="text-edit"]')
+    expect(edit.attributes('contenteditable')).toBe('true')
+  })
+
+  it('is NOT editable when this element is selected but a non-select tool is active', () => {
+    const store = usePagesStore()
+    store.selectedElId = sampleEl.id
+    store.activeTool = 'text'
+    const w = mount(TextWidget, { props: { el: sampleEl } })
+    const edit = w.find('[data-role="text-edit"]')
+    expect(edit.attributes('contenteditable')).toBe('false')
+  })
+
+  it('input event calls store.setElementText with the innerText', async () => {
+    const store = usePagesStore()
+    store.selectedElId = sampleEl.id
+    store.activeTool = 'select'
+    store.addElement(sampleEl)
+
+    const w = mount(TextWidget, { props: { el: sampleEl } })
+    const edit = w.find('[data-role="text-edit"]')
+
+    // Simulate innerText being set and an input event fired
+    Object.defineProperty(edit.element, 'innerText', {
+      value: 'New text',
+      configurable: true,
+      writable: true,
+    })
+    await edit.trigger('input')
+
+    const el = store.selectedPage?.elements[0]
+    expect(el?.type === 'text' && (el as TextEl).text).toBe('New text')
   })
 })

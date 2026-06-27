@@ -6,11 +6,12 @@ import type { ToolId, EpaperColour } from '@/stores/types'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import {
-  MousePointer2, Calendar, Pencil, Image as ImageIcon, Trash2,
+  MousePointer2, Calendar, Pencil, Image as ImageIcon, Trash2, Type,
 } from '@lucide/vue'
 import CalendarOptions from './ToolOptions/CalendarOptions.vue'
 import DrawOptions from './ToolOptions/DrawOptions.vue'
 import ImageOptions from './ToolOptions/ImageOptions.vue'
+import TextOptions from './ToolOptions/TextOptions.vue'
 
 const store = usePagesStore()
 const opts = useToolOptionsStore()
@@ -101,6 +102,21 @@ function pickColour(c: EpaperColour) {
           </button>
         </PopoverTrigger>
         <PopoverContent side="right" class="w-48"><ImageOptions /></PopoverContent>
+      </Popover>
+
+      <!-- Text -->
+      <Popover>
+        <PopoverTrigger as-child>
+          <button
+            data-tool="text"
+            class="flex h-9 w-9 items-center justify-center rounded hover:bg-neutral-200"
+            :class="store.activeTool === 'text' ? 'bg-neutral-200' : ''"
+            @click="pickTool('text')"
+          >
+            <Type class="h-5 w-5" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent side="right" class="w-48"><TextOptions /></PopoverContent>
       </Popover>
 
       <!-- Delete selected element -->

@@ -4,6 +4,7 @@ import { usePagesStore } from '@/stores/pages'
 import CalendarWidget from './widgets/CalendarWidget.vue'
 import ImageWidget from './widgets/ImageWidget.vue'
 import DrawingWidget from './widgets/DrawingWidget.vue'
+import TextWidget from './widgets/TextWidget.vue'
 
 const props = defineProps<{ pageId: string }>()
 const store = usePagesStore()
@@ -38,6 +39,7 @@ function onDragStart(e: DragEvent) {
         <CalendarWidget v-if="el.type === 'calendar'" :el="el" />
         <ImageWidget v-else-if="el.type === 'image'" :el="el" />
         <DrawingWidget v-else-if="el.type === 'drawing'" :el="el" />
+        <TextWidget v-else-if="el.type === 'text'" :el="el" />
       </div>
     </div>
   </div>

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { makeElement, makeDrawingElement } from './elementFactory'
 
-const opts = { calendarVariant: 'week' as const, colour: 'red' as const, feedId: 'family' }
+const opts = { calendarVariant: 'week' as const, colour: 'red' as const, feedId: 'family', font: 'atkinson-hyperlegible', align: 'left' as const }
 const size = { w: 800, h: 480 }
 
 describe('makeElement', () => {
@@ -30,6 +30,27 @@ describe('makeElement', () => {
 
   it('carries the colour from opts onto the element', () => {
     const el = makeElement('calendar', opts, size)
+    expect(el.colour).toBe('red')
+  })
+
+  it('makes a text element with text, font, and align from opts', () => {
+    const el = makeElement('text', opts, size)
+    expect(el.type).toBe('text')
+    if (el.type === 'text') {
+      expect(el.text).toBe('Text')
+      expect(el.font).toBe('atkinson-hyperlegible')
+      expect(el.align).toBe('left')
+    }
+  })
+
+  it('text element uses the text SIZES defaults when no rect given', () => {
+    const el = makeElement('text', opts, size)
+    expect(el.w).toBe(240)
+    expect(el.h).toBe(80)
+  })
+
+  it('text element carries the colour from opts', () => {
+    const el = makeElement('text', opts, size)
     expect(el.colour).toBe('red')
   })
 })

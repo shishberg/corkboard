@@ -7,6 +7,7 @@ import MovableElement from './MovableElement.vue'
 import CalendarWidget from './widgets/CalendarWidget.vue'
 import ImageWidget from './widgets/ImageWidget.vue'
 import DrawingWidget from './widgets/DrawingWidget.vue'
+import TextWidget from './widgets/TextWidget.vue'
 import DrawingLayer from './widgets/DrawingLayer.vue'
 
 const store = usePagesStore()
@@ -67,7 +68,7 @@ function surfaceLocal(e: PointerEvent) {
 // --- Draw-to-place: drag on the surface to create the active tool's element ---
 let createStart = { x: 0, y: 0 }
 let createStartRaw = { x: 0, y: 0 }
-let createTool: 'calendar' | 'image' = 'calendar'
+let createTool: 'calendar' | 'image' | 'text' = 'calendar'
 let creatingId: string | null = null
 // Below this many screen pixels of movement we treat the gesture as a click,
 // not a drag. Measured in raw CSS pixels so zoom doesn't change the decision.
@@ -76,13 +77,13 @@ const CREATE_MIN = 8
 
 function onSurfacePointerDown(e: PointerEvent) {
   const tool = store.activeTool
-  if (tool === 'calendar' || tool === 'image') {
+  if (tool === 'calendar' || tool === 'image' || tool === 'text') {
     createTool = tool
     createStart = surfaceLocal(e)
     createStartRaw = { x: e.clientX, y: e.clientY }
     const el = makeElement(
       tool,
-      { calendarVariant: opts.calendarVariant, colour: opts.colour, feedId: opts.feedId },
+      { calendarVariant: opts.calendarVariant, colour: opts.colour, feedId: opts.feedId, font: opts.font, align: opts.align },
       size.value,
       { x: createStart.x, y: createStart.y, w: CREATE_MIN, h: CREATE_MIN },
     )
@@ -164,6 +165,7 @@ function onStroke(points: { x: number; y: number }[]) {
         <CalendarWidget v-if="el.type === 'calendar'" :el="el" />
         <ImageWidget v-else-if="el.type === 'image'" :el="el" />
         <DrawingWidget v-else-if="el.type === 'drawing'" :el="el" />
+        <TextWidget v-else-if="el.type === 'text'" :el="el" />
       </MovableElement>
 
       <!-- Active drawing surface, only while the pen tool is selected -->

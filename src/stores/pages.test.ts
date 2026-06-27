@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePagesStore } from './pages'
-import type { ImageEl, DrawingEl } from './types'
+import type { ImageEl, DrawingEl, TextEl } from './types'
 
 beforeEach(() => setActivePinia(createPinia()))
 
 function imageEl(id: string): ImageEl {
   return { id, type: 'image', x: 0, y: 0, w: 200, h: 150, colour: 'black', src: '' }
+}
+
+function textEl(id: string): TextEl {
+  return { id, type: 'text', x: 0, y: 0, w: 240, h: 80, colour: 'black', text: 'Text', font: 'atkinson-hyperlegible', align: 'left' }
 }
 
 describe('usePagesStore', () => {
@@ -117,6 +121,77 @@ describe('usePagesStore', () => {
     s.addElement(imageEl('e1'))
     s.setElementColour('ghost', 'blue')
     expect(s.selectedPage?.elements[0].colour).toBe('black')
+  })
+
+  it('setElementText sets text on a text element', () => {
+    const s = usePagesStore()
+    s.addElement(textEl('t1'))
+    s.setElementText('t1', 'Hello')
+    const el = s.selectedPage?.elements[0] as TextEl
+    expect(el.text).toBe('Hello')
+  })
+
+  it('setElementText is a no-op for an unknown id', () => {
+    const s = usePagesStore()
+    s.addElement(textEl('t1'))
+    s.setElementText('ghost', 'ignored')
+    const el = s.selectedPage?.elements[0] as TextEl
+    expect(el.text).toBe('Text')
+  })
+
+  it('setElementText is a no-op for a non-text element', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('i1'))
+    s.setElementText('i1', 'ignored')
+    expect(s.selectedPage?.elements[0].type).toBe('image')
+  })
+
+  it('setElementFont sets font on a text element', () => {
+    const s = usePagesStore()
+    s.addElement(textEl('t1'))
+    s.setElementFont('t1', 'other-font')
+    const el = s.selectedPage?.elements[0] as TextEl
+    expect(el.font).toBe('other-font')
+  })
+
+  it('setElementFont is a no-op for an unknown id', () => {
+    const s = usePagesStore()
+    s.addElement(textEl('t1'))
+    s.setElementFont('ghost', 'other-font')
+    const el = s.selectedPage?.elements[0] as TextEl
+    expect(el.font).toBe('atkinson-hyperlegible')
+  })
+
+  it('setElementFont is a no-op for a non-text element', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('i1'))
+    // should not throw
+    s.setElementFont('i1', 'any-font')
+    expect(s.selectedPage?.elements[0].type).toBe('image')
+  })
+
+  it('setElementAlign sets align on a text element', () => {
+    const s = usePagesStore()
+    s.addElement(textEl('t1'))
+    s.setElementAlign('t1', 'center')
+    const el = s.selectedPage?.elements[0] as TextEl
+    expect(el.align).toBe('center')
+  })
+
+  it('setElementAlign is a no-op for an unknown id', () => {
+    const s = usePagesStore()
+    s.addElement(textEl('t1'))
+    s.setElementAlign('ghost', 'center')
+    const el = s.selectedPage?.elements[0] as TextEl
+    expect(el.align).toBe('left')
+  })
+
+  it('setElementAlign is a no-op for a non-text element', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('i1'))
+    // should not throw
+    s.setElementAlign('i1', 'center')
+    expect(s.selectedPage?.elements[0].type).toBe('image')
   })
 
   it('setElementColour on a drawing element also updates each stroke colour', () => {

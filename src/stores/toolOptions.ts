@@ -8,6 +8,8 @@ interface ToolOptionsState {
   colour: EpaperColour
   penSize: number
   feedId: string
+  font: string
+  align: 'left' | 'center'
 }
 
 const defaults: ToolOptionsState = {
@@ -15,6 +17,8 @@ const defaults: ToolOptionsState = {
   colour: 'black',
   penSize: 4,
   feedId: '',
+  font: 'atkinson-hyperlegible',
+  align: 'left',
 }
 
 function load(): ToolOptionsState {
@@ -30,6 +34,8 @@ function load(): ToolOptionsState {
       colour,
       penSize: (parsed.penSize ?? defaults.penSize) as ToolOptionsState['penSize'],
       feedId: (parsed.feedId ?? defaults.feedId) as ToolOptionsState['feedId'],
+      font: (parsed.font ?? defaults.font) as ToolOptionsState['font'],
+      align: (parsed.align ?? defaults.align) as ToolOptionsState['align'],
     }
   } catch {
     return { ...defaults }
