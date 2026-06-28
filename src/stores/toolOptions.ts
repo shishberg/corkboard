@@ -6,6 +6,8 @@ const KEY = 'corkboard.toolOptions'
 interface ToolOptionsState {
   calendarVariant: 'date' | 'agenda'
   colour: EpaperColour
+  // Outline (halo) colour for new text/calendar elements. undefined = no outline.
+  outline?: EpaperColour
   penSize: number
   feedId: string
   font: string
@@ -16,6 +18,7 @@ interface ToolOptionsState {
 const defaults: ToolOptionsState = {
   calendarVariant: 'agenda',
   colour: 'black',
+  outline: undefined,
   penSize: 4,
   feedId: '',
   font: 'atkinson-hyperlegible',
@@ -38,6 +41,7 @@ function load(): ToolOptionsState {
     return {
       calendarVariant,
       colour,
+      outline: (parsed.outline ?? defaults.outline) as ToolOptionsState['outline'],
       penSize: (parsed.penSize ?? defaults.penSize) as ToolOptionsState['penSize'],
       feedId: (parsed.feedId ?? defaults.feedId) as ToolOptionsState['feedId'],
       font: (parsed.font ?? defaults.font) as ToolOptionsState['font'],

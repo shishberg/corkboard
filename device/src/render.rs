@@ -68,12 +68,13 @@ pub fn render(
                         px,
                         align,
                         el.colour.rgb(),
+                        el.outline.as_ref().map(|c| c.rgb()),
                     );
                 }
 
                 Element::Calendar(el) => {
                     let colour = el.colour.rgb();
-                    let font = faces.get(&el.font);
+                    let outline = el.outline.as_ref().map(|c| c.rgb());
 
                     match el.variant {
                         CalendarVariant::Date => {
@@ -104,6 +105,7 @@ pub fn render(
                                 date_px,
                                 date_align,
                                 colour,
+                                outline,
                             );
                         }
 
@@ -129,6 +131,7 @@ pub fn render(
                                 el.x, el.y, el.w, el.h,
                                 colour,
                                 el.days_ahead,
+                                outline,
                             );
                         }
                     }
@@ -428,6 +431,7 @@ fn draw_agenda(
     h: f32,
     colour: [u8; 3],
     days_ahead: u32,
+    outline: Option<[u8; 3]>,
 ) {
     let regular = faces.get(font_id);
     let heading_face = faces.heading(font_id);
@@ -468,7 +472,7 @@ fn draw_agenda(
         text::draw_text(
             pixmap, heading_face, &heading,
             x0, y_pos, inner_w, line_h,
-            px, text::Align::Left, colour,
+            px, text::Align::Left, colour, outline,
         );
         y_pos += line_h;
 
@@ -480,7 +484,7 @@ fn draw_agenda(
             text::draw_text(
                 pixmap, regular, &line,
                 x0 + indent, y_pos, inner_w - indent, line_h,
-                px, text::Align::Left, colour,
+                px, text::Align::Left, colour, outline,
             );
             // Thin divider under the event, in the text colour.
             let divider_y = (y_pos + line_h - 1.0).round();
@@ -596,7 +600,7 @@ mod tests {
             colour: Colour::Red,
             text: "Hello World".to_string(),
             font: String::new(),
-            align: TextAlign::Left,
+            align: TextAlign::Left, outline: None,
         })]);
         let cfg = Config::default();
         let fonts = Fonts::load();
@@ -821,7 +825,7 @@ mod tests {
                 feed_id: String::new(),
                 font: String::new(),
                 align: TextAlign::Center,
-                days_ahead: 7,
+                days_ahead: 7, outline: None,
             })]);
             render(&doc, &cfg, &fonts, &storage, &cal).unwrap()
         };
@@ -851,7 +855,7 @@ mod tests {
                 feed_id: String::new(),
                 font: font.to_string(),
                 align: TextAlign::Center,
-                days_ahead: 7,
+                days_ahead: 7, outline: None,
             })]);
             render(&doc, &cfg, &fonts, &storage, &cal).unwrap()
         };
@@ -894,7 +898,7 @@ mod tests {
             feed_id: String::new(),
             font: String::new(),
             align: TextAlign::Center,
-            days_ahead: 7,
+            days_ahead: 7, outline: None,
         })]);
         let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
         // Non-trivial output (the sample agenda drew some ink).
@@ -919,7 +923,7 @@ mod tests {
             feed_id: "f".to_string(),
             font: String::new(),
             align: TextAlign::Center,
-            days_ahead: 7,
+            days_ahead: 7, outline: None,
         })]);
         let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
         assert!(!png.is_empty());
@@ -938,7 +942,7 @@ mod tests {
             colour: Colour::Black,
             text: "Hello World".to_string(),
             font: String::new(),
-            align: TextAlign::Left,
+            align: TextAlign::Left, outline: None,
         })]);
         let cfg = Config::default();
         let fonts = Fonts::load();
@@ -976,6 +980,7 @@ mod tests {
                 text: "Alignment Test".to_string(),
                 font: String::new(),
                 align,
+                outline: None,
             })]);
             render(&doc, &cfg, &fonts, &storage, &cal).unwrap()
         };
@@ -1004,7 +1009,7 @@ mod tests {
             feed_id: String::new(),
             font: String::new(),
             align: TextAlign::Center,
-            days_ahead: 7,
+            days_ahead: 7, outline: None,
         })]);
         let cfg = Config::default();
         let fonts = Fonts::load();

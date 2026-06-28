@@ -55,6 +55,12 @@ The editor's `DocState` IS the wire format. Round-two changes from the round-one
 - **Added:** `TextEl` (`type: 'text'`) — `text: string`, `font: string` (a name from the font
   manifest), `align: 'left' | 'center'`, plus the shared `colour` / `x` / `y` / `w` / `h`.
 
+- **Added:** `outline?: EpaperColour` on `TextEl` and `CalendarEl` (absent = no outline,
+  `#[serde(default)]`). A contrasting 1px halo around the text. The device draws it by dilation —
+  the mono glyph bitmap blitted at the 8 neighbour offsets in the outline colour, fill on top
+  (`text::draw_text`, exact palette colour, no AA). The editor mirrors it with a layered
+  `text-shadow` (`src/lib/textOutline.ts`) — NOT `-webkit-text-stroke`, which grows inward.
+
 Element types are a discriminated union on `type`: `calendar | text | image | drawing`.
 
 Fonts: text is shaped from bundled font files (default Atkinson Hyperlegible), served by the

@@ -185,12 +185,25 @@ pub fn fit_font_size(
     best
 }
 
+/// 8-neighbour offsets for the outline halo (dilation by one pixel).
+const OUTLINE_OFFSETS: [(i32, i32); 8] = [
+    (-1, -1), (0, -1), (1, -1),
+    (-1, 0),           (1, 0),
+    (-1, 1),  (0, 1),  (1, 1),
+];
+
 /// Render `text` into `pixmap` within the box (x, y, w, h).
 ///
 /// - Word-wraps at width `w`; clips lines whose bottom would exceed y+h.
 /// - Baseline for line i = y + ascent + i * line_height  (line_height = px * 1.25).
 /// - Each glyph is a FreeType 1-bit (mono) bitmap; set pixels are painted the
 ///   given colour, unset pixels leave the background untouched.
+/// - When `outline` is `Some`, each glyph first gets a 1px halo in that colour
+///   (the same bitmap blitted at the 8 neighbour offsets); the fill is drawn on
+///   top afterwards so it always sits over every neighbour's halo. This is the
+///   dilation approach — pure 1-bit, no anti-aliasing — mirrored in the editor
+///   by a layered text-shadow (see src/lib/textOutline.ts).
+#[allow(clippy::too_many_arguments)]
 pub fn draw_text(
     pixmap: &mut tiny_skia::Pixmap,
     face: &Face,
@@ -202,6 +215,7 @@ pub fn draw_text(
     px: f32,
     align: Align,
     colour: [u8; 3],
+    outline: Option<[u8; 3]>,
 ) {
     let px = set_px(face, px);
     let line_height = px as f32 * LINE_HEIGHT;
@@ -226,6 +240,31 @@ pub fn draw_text(
             Align::Left => x,
             Align::Center => x + (w - line_w) / 2.0,
         };
+
+        // Outline pass first: halo every glyph so the fill pass below always
+        // covers neighbours' halos. Skipped entirely when there's no outline.
+        if let Some(oc) = outline {
+            let mut pen_x = x_start;
+            for ch in line.chars() {
+                if face
+                    .load_char(ch as usize, LoadFlag::RENDER | LoadFlag::TARGET_MONO)
+                    .is_err()
+                {
+                    continue;
+                }
+                let slot = face.glyph();
+                let left = slot.bitmap_left();
+                let top = slot.bitmap_top();
+                let advance = (slot.advance().x >> 6) as f32;
+                let bitmap = slot.bitmap();
+                let gx = pen_x.round() as i32 + left;
+                let gy = baseline - top;
+                for (dx, dy) in OUTLINE_OFFSETS {
+                    blit_mono(pixmap, &bitmap, gx + dx, gy + dy, oc);
+                }
+                pen_x += advance;
+            }
+        }
 
         let mut pen_x = x_start;
         for ch in line.chars() {
@@ -327,6 +366,7 @@ mod tests {
             20.0,
             Align::Left,
             [220, 40, 40],
+            None,
         );
 
         let has_reddish = pixmap.pixels().iter().any(|p| {
@@ -349,12 +389,36 @@ mod tests {
         let (_lib, faces) = test_faces();
         let mut pixmap = Pixmap::new(120, 40).unwrap();
         pixmap.fill(tiny_skia::Color::WHITE);
-        draw_text(&mut pixmap, faces.default(), "Agenda 0", 0.0, 0.0, 120.0, 40.0, 16.0, Align::Left, [0, 0, 0]);
+        draw_text(&mut pixmap, faces.default(), "Agenda 0", 0.0, 0.0, 120.0, 40.0, 16.0, Align::Left, [0, 0, 0], None);
         for p in pixmap.pixels() {
             let (r, g, b) = (p.red(), p.green(), p.blue());
             let is_black = r == 0 && g == 0 && b == 0;
             let is_white = r == 255 && g == 255 && b == 255;
             assert!(is_black || is_white, "found a non-1-bit pixel: ({r},{g},{b})");
+        }
+    }
+
+    #[test]
+    fn outline_haloes_glyphs_with_the_outline_colour() {
+        // White fill on a white background leaves no marks on its own; the black
+        // outline must paint a halo, so black pixels prove the dilation ran.
+        let (_lib, faces) = test_faces();
+        let mut pixmap = Pixmap::new(120, 40).unwrap();
+        pixmap.fill(tiny_skia::Color::WHITE);
+        draw_text(
+            &mut pixmap, faces.default(), "Hi",
+            0.0, 0.0, 120.0, 40.0, 24.0, Align::Left,
+            [255, 255, 255], Some([0, 0, 0]),
+        );
+        let has_black = pixmap
+            .pixels()
+            .iter()
+            .any(|p| p.red() == 0 && p.green() == 0 && p.blue() == 0);
+        assert!(has_black, "outline should paint a black halo around the glyphs");
+        // Still strictly 1-bit: outline is an exact palette colour, no AA greys.
+        for p in pixmap.pixels() {
+            let (r, g, b) = (p.red(), p.green(), p.blue());
+            assert!((r == 0 && g == 0 && b == 0) || (r == 255 && g == 255 && b == 255));
         }
     }
 

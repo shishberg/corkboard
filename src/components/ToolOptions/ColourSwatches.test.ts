@@ -79,4 +79,48 @@ describe('ColourSwatches', () => {
     await nextTick()
     expect(w.get('[data-colour="green"]').classes().join(' ')).toContain('ring')
   })
+
+  it('shift-clicking a swatch with no selection sets opts.outline', async () => {
+    const opts = useToolOptionsStore()
+    const w = mount(ColourSwatches)
+    await w.get('[data-colour="white"]').trigger('click', { shiftKey: true })
+    expect(opts.outline).toBe('white')
+  })
+
+  it('shift-clicking with a text/calendar selection sets the element outline', async () => {
+    const store = usePagesStore()
+    store.addElement(calendarEl('e1'))
+    const opts = useToolOptionsStore()
+    const w = mount(ColourSwatches)
+    await w.get('[data-colour="white"]').trigger('click', { shiftKey: true })
+    expect(store.selectedPage?.elements[0]).toMatchObject({ outline: 'white' })
+    expect(opts.outline).toBe('white')
+  })
+
+  it('shift-clicking the current outline colour again removes it', async () => {
+    const store = usePagesStore()
+    store.addElement(calendarEl('e1'))
+    const w = mount(ColourSwatches)
+    await w.get('[data-colour="white"]').trigger('click', { shiftKey: true })
+    expect(store.selectedPage?.elements[0]).toMatchObject({ outline: 'white' })
+    await w.get('[data-colour="white"]').trigger('click', { shiftKey: true })
+    expect((store.selectedPage?.elements[0] as { outline?: string }).outline).toBeUndefined()
+  })
+
+  it('shift-click does nothing with the background tool active', async () => {
+    const store = usePagesStore()
+    store.setActiveTool('background')
+    const opts = useToolOptionsStore()
+    const w = mount(ColourSwatches)
+    await w.get('[data-colour="white"]').trigger('click', { shiftKey: true })
+    expect(opts.outline).toBeUndefined()
+  })
+
+  it('marks the active outline swatch with data-outline', async () => {
+    const store = usePagesStore()
+    store.addElement({ ...calendarEl('e1'), outline: 'red' })
+    const w = mount(ColourSwatches)
+    await nextTick()
+    expect(w.get('[data-colour="red"]').attributes('data-outline')).toBe('true')
+  })
 })

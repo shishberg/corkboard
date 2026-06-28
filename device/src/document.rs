@@ -115,6 +115,9 @@ pub struct CalendarEl {
     /// Agenda horizon: how many days ahead to show (1..=7). Clamped at render.
     #[serde(default = "default_days_ahead")]
     pub days_ahead: u32,
+    /// Optional outline (halo) colour for the calendar's text. Absent = no outline.
+    #[serde(default)]
+    pub outline: Option<Colour>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -162,6 +165,9 @@ pub struct TextEl {
     pub font: String,
     #[serde(default)]
     pub align: TextAlign,
+    /// Optional outline (halo) colour for the text. Absent = no outline.
+    #[serde(default)]
+    pub outline: Option<Colour>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

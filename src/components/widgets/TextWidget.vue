@@ -3,6 +3,7 @@ import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import type { TextEl } from '@/stores/types'
 import { usePagesStore } from '@/stores/pages'
 import { fitFontSize, LINE_HEIGHT } from '@/lib/textFit'
+import { outlineTextShadow } from '@/lib/textOutline'
 
 const props = withDefaults(defineProps<{ el: TextEl; editing?: boolean }>(), {
   editing: false,
@@ -111,6 +112,7 @@ function onKeydown(e: KeyboardEvent) {
         fontFamily: el.font,
         textAlign: el.align,
         color: el.colour,
+        textShadow: outlineTextShadow(el.outline),
         lineHeight: String(LINE_HEIGHT),
         whiteSpace: 'pre-wrap',
         outline: 'none',

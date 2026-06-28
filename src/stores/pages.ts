@@ -136,6 +136,14 @@ export const usePagesStore = defineStore('pages', {
         for (const stroke of el.strokes) stroke.colour = colour
       }
     },
+    // Outline (a contrasting halo) applies to the text-bearing elements. Passing
+    // undefined clears it. Anything else is ignored.
+    setElementOutline(id: string, outline: EpaperColour | undefined) {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      const el = page?.elements.find((e) => e.id === id)
+      if (!el || (el.type !== 'text' && el.type !== 'calendar')) return
+      ;(el as TextEl | CalendarEl).outline = outline
+    },
     setElementSrc(id: string, src: string) {
       const page = this.pages.find((p) => p.id === this.selectedPageId)
       const el = page?.elements.find((e) => e.id === id)

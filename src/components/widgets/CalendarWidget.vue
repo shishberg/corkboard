@@ -4,6 +4,7 @@ import type { CalendarEl } from '@/stores/types'
 import { useFontsStore } from '@/stores/fonts'
 import { fitFontSize, LINE_HEIGHT } from '@/lib/textFit'
 import { formatSampleDate, sampleAgenda, format12h } from '@/lib/sampleCalendar'
+import { outlineTextShadow } from '@/lib/textOutline'
 
 const props = defineProps<{ el: CalendarEl }>()
 
@@ -102,7 +103,7 @@ const agenda = computed(() => {
   <div
     data-role="calendar-root"
     class="h-full w-full overflow-hidden"
-    :style="{ color: el.colour, fontFamily: effectiveFont }"
+    :style="{ color: el.colour, fontFamily: effectiveFont, textShadow: outlineTextShadow(el.outline) }"
   >
     <!-- Date variant: large formatted date filling the box. Top-aligned with
          horizontal alignment from el.align, exactly like a text element and the
