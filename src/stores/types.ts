@@ -14,6 +14,17 @@ export type El = CalendarEl | ImageEl | DrawingEl | TextEl
 
 export interface Page { id: string; name: string; elements: El[]; background?: EpaperColour; orientation: Orientation }
 
+export interface Size { w: number; h: number }
+
+// Canvas dimensions for a page, derived from its orientation. Size is a function
+// of the page (not a stored field, not a document-global) — null defaults to
+// landscape. Use this everywhere a page's pixel size is needed.
+export function pageSize(page: Pick<Page, 'orientation'> | null | undefined): Size {
+  return (page?.orientation ?? 'landscape') === 'portrait'
+    ? { w: 480, h: 800 }
+    : { w: 800, h: 480 }
+}
+
 export interface DocState {
   pages: Page[]
   livePageId: string | null

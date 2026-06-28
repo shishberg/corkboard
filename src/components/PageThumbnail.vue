@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { usePagesStore } from '@/stores/pages'
+import { pageSize } from '@/stores/types'
 import CalendarWidget from './widgets/CalendarWidget.vue'
 import ImageWidget from './widgets/ImageWidget.vue'
 import DrawingWidget from './widgets/DrawingWidget.vue'
@@ -11,13 +12,9 @@ const store = usePagesStore()
 
 const THUMB_W = 120
 const page = computed(() => store.pages.find((p) => p.id === props.pageId) ?? null)
-// Orientation is per-page, so size this thumbnail from its OWN page, not the
-// selected page (store.pageSize follows the selected page).
-const size = computed(() =>
-  (page.value?.orientation ?? 'landscape') === 'portrait'
-    ? { w: 480, h: 800 }
-    : { w: 800, h: 480 },
-)
+// Size from this thumbnail's OWN page, not the selected page (store.pageSize
+// follows the selected page).
+const size = computed(() => pageSize(page.value))
 const scale = computed(() => THUMB_W / size.value.w)
 
 function onDragStart(e: DragEvent) {

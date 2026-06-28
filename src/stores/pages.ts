@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import type { DocState, LoadedDoc, El, Page, ToolId, BaseEl, EpaperColour, TextEl, ImageEl, Orientation } from './types'
+import type { DocState, LoadedDoc, El, Page, ToolId, BaseEl, EpaperColour, TextEl, ImageEl, Orientation, Size } from './types'
+import { pageSize } from './types'
 
 let counter = 0
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`
@@ -11,6 +12,7 @@ function blankPage(orientation: Orientation = 'landscape'): Page {
 export const usePagesStore = defineStore('pages', {
   state: (): DocState => {
     const first = blankPage()
+    first.name = 'Page 1'
     return {
       pages: [first],
       livePageId: first.id,
@@ -29,9 +31,8 @@ export const usePagesStore = defineStore('pages', {
     },
     // Canvas size for the page being edited. Orientation is per-page now, so
     // this follows the selected page (defaulting to landscape if none).
-    pageSize(): { w: number; h: number } {
-      const o = this.selectedPage?.orientation ?? 'landscape'
-      return o === 'landscape' ? { w: 800, h: 480 } : { w: 480, h: 800 }
+    pageSize(): Size {
+      return pageSize(this.selectedPage)
     },
   },
 
