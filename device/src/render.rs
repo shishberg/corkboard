@@ -89,13 +89,17 @@ pub fn render(
                             // text element, so it isn't perpetually tiny. The
                             // editor's CalendarWidget mirrors this fit.
                             let date_px = text::fit_font_size(font, &date_str, el.w, el.h, 10.0, 240.0);
+                            let date_align = match el.align {
+                                TextAlign::Left => text::Align::Left,
+                                TextAlign::Center => text::Align::Center,
+                            };
                             text::draw_text(
                                 &mut pixmap,
                                 font,
                                 &date_str,
                                 el.x, el.y, el.w, el.h,
                                 date_px,
-                                text::Align::Center,
+                                date_align,
                                 colour,
                             );
                         }
@@ -842,6 +846,7 @@ mod tests {
                 variant,
                 feed_id: String::new(),
                 font: String::new(),
+                align: TextAlign::Center,
             })]);
             render(&doc, &cfg, &fonts, &storage, &cal).unwrap()
         };
@@ -873,6 +878,7 @@ mod tests {
                 variant: CalendarVariant::Date,
                 feed_id: String::new(),
                 font: font.to_string(),
+                align: TextAlign::Center,
             })]);
             render(&doc, &cfg, &fonts, &storage, &cal).unwrap()
         };
@@ -913,7 +919,8 @@ mod tests {
             colour: Colour::Black,
             variant: CalendarVariant::Agenda,
             feed_id: String::new(),
-                font: String::new(),
+            font: String::new(),
+            align: TextAlign::Center,
         })]);
         let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
         // Non-trivial output (the sample agenda drew some ink).
@@ -936,7 +943,8 @@ mod tests {
             colour: Colour::Black,
             variant: CalendarVariant::Agenda,
             feed_id: "f".to_string(),
-                font: String::new(),
+            font: String::new(),
+            align: TextAlign::Center,
         })]);
         let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
         assert!(!png.is_empty());
@@ -1019,7 +1027,8 @@ mod tests {
             colour: Colour::Black,
             variant: CalendarVariant::Today,
             feed_id: String::new(),
-                font: String::new(),
+            font: String::new(),
+            align: TextAlign::Center,
         })]);
         let cfg = Config::default();
         let fonts = Fonts::load();

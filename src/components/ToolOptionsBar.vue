@@ -26,7 +26,7 @@ const panels: PanelDef[] = [
   },
   { component: CalendarOptions, tools: ['calendar'], elementTypes: ['calendar'] },
   { component: FontOptions, tools: ['calendar', 'text'], elementTypes: ['calendar', 'text'] },
-  { component: AlignOptions, tools: ['text'], elementTypes: ['text'] },
+  { component: AlignOptions, tools: ['text', 'calendar'], elementTypes: ['text', 'calendar'] },
   // Pen size has no per-element edit: a placed drawing has per-stroke sizes.
   { component: DrawOptions, tools: ['draw'], elementTypes: [] },
 ]

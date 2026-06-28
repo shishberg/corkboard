@@ -2,7 +2,7 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import type { CalendarEl } from '@/stores/types'
 import { useFontsStore } from '@/stores/fonts'
-import { fitFontSize } from '@/lib/textFit'
+import { fitFontSize, LINE_HEIGHT } from '@/lib/textFit'
 import { formatSampleDate, SAMPLE_TODAY_EVENTS, sampleAgenda, format12h } from '@/lib/sampleCalendar'
 
 const props = defineProps<{ el: CalendarEl }>()
@@ -74,12 +74,19 @@ function eventLine(ev: { time: string; title: string }): string {
     class="h-full w-full overflow-hidden"
     :style="{ color: el.colour, fontFamily: effectiveFont }"
   >
-    <!-- Date variant: large centred formatted date -->
+    <!-- Date variant: large formatted date filling the box. Top-aligned with
+         horizontal alignment from el.align, exactly like a text element and the
+         device renderer (text::draw_text), so the editor and panel match. -->
     <div
       v-if="variant === 'date'"
       data-role="calendar-date"
-      class="flex h-full items-center justify-center text-center font-bold"
-      :style="{ fontSize: datePxSize }"
+      class="h-full w-full font-bold"
+      :style="{
+        fontSize: datePxSize,
+        textAlign: el.align,
+        lineHeight: String(LINE_HEIGHT),
+        whiteSpace: 'pre-wrap',
+      }"
     >
       {{ formattedDate }}
     </div>

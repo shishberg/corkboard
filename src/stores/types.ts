@@ -3,7 +3,7 @@ export type ToolId = 'select' | 'calendar' | 'draw' | 'image' | 'text' | 'backgr
 export type EpaperColour = 'black' | 'white' | 'red' | 'yellow' | 'blue' | 'green'
 
 export interface BaseEl { id: string; type: string; x: number; y: number; w: number; h: number; colour: EpaperColour }
-export interface CalendarEl extends BaseEl { type: 'calendar'; variant: 'date' | 'today' | 'agenda'; feedId: string; font: string }
+export interface CalendarEl extends BaseEl { type: 'calendar'; variant: 'date' | 'today' | 'agenda'; feedId: string; font: string; align: 'left' | 'center' }
 export interface ImageEl extends BaseEl { type: 'image'; src: string }
 export interface DrawingEl extends BaseEl { type: 'drawing'; natW: number; natH: number; strokes: Stroke[] }
 export interface TextEl extends BaseEl { type: 'text'; text: string; font: string; align: 'left' | 'center' }

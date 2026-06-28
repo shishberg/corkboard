@@ -174,8 +174,9 @@ export const usePagesStore = defineStore('pages', {
     setElementAlign(id: string, align: 'left' | 'center') {
       const page = this.pages.find((p) => p.id === this.selectedPageId)
       const el = page?.elements.find((e) => e.id === id)
-      if (!el || el.type !== 'text') return
-      ;(el as TextEl).align = align
+      // Alignment applies to any element that contains text.
+      if (!el || (el.type !== 'text' && el.type !== 'calendar')) return
+      ;(el as TextEl | CalendarEl).align = align
     },
     hydrate(doc: LoadedDoc) {
       if (!doc.pages || doc.pages.length === 0) return
@@ -186,10 +187,15 @@ export const usePagesStore = defineStore('pages', {
         ...p,
         background: p.background ?? 'white',
         orientation: p.orientation ?? legacyOrientation,
-        // Migrate the legacy 'week' calendar variant to 'agenda'.
+        // Normalise legacy calendars: migrate the 'week' variant to 'agenda'
+        // and default a missing align to 'center' (the old fixed date layout).
         elements: p.elements.map((el) =>
-          el.type === 'calendar' && (el.variant as string) === 'week'
-            ? { ...el, variant: 'agenda' as const }
+          el.type === 'calendar'
+            ? {
+                ...el,
+                variant: ((el.variant as string) === 'week' ? 'agenda' : el.variant) as CalendarEl['variant'],
+                align: (el as CalendarEl).align ?? 'center',
+              }
             : el,
         ),
       }))

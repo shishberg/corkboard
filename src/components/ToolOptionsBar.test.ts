@@ -8,7 +8,7 @@ import * as fontsLib from '@/lib/fonts'
 import type { ToolId } from '@/stores/types'
 
 function calendarEl(id: string) {
-  return { id, type: 'calendar' as const, variant: 'today' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible' }
+  return { id, type: 'calendar' as const, variant: 'today' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible', align: 'center' as const }
 }
 function textEl(id: string) {
   return { id, type: 'text' as const, x: 0, y: 0, w: 240, h: 80, colour: 'black' as const, text: 'Text', font: 'atkinson-hyperlegible', align: 'left' as const }
@@ -48,12 +48,12 @@ describe('ToolOptionsBar visibility by active tool', () => {
     }
   })
 
-  it('calendar tool shows calendar, font and colour panels (no align, no pen)', async () => {
+  it('calendar tool shows calendar, font, align and colour panels (no pen)', async () => {
     const w = await mountWithTool('calendar')
     expect(w.find(FEED).exists()).toBe(true)
     expect(w.find(FONT).exists()).toBe(true)
     expect(w.find(COLOUR).exists()).toBe(true)
-    expect(w.find(ALIGN).exists()).toBe(false)
+    expect(w.find(ALIGN).exists()).toBe(true)
     expect(w.find(PEN).exists()).toBe(false)
   })
 
@@ -83,7 +83,7 @@ describe('ToolOptionsBar visibility by active tool', () => {
 })
 
 describe('ToolOptionsBar visibility by selected element', () => {
-  it('a selected calendar (select tool) shows calendar, font and colour panels', async () => {
+  it('a selected calendar (select tool) shows calendar, font, align and colour panels', async () => {
     const store = usePagesStore()
     store.addElement(calendarEl('c1'))
     store.setActiveTool('select')
@@ -92,7 +92,7 @@ describe('ToolOptionsBar visibility by selected element', () => {
     expect(w.find(FEED).exists()).toBe(true)
     expect(w.find(FONT).exists()).toBe(true)
     expect(w.find(COLOUR).exists()).toBe(true)
-    expect(w.find(ALIGN).exists()).toBe(false)
+    expect(w.find(ALIGN).exists()).toBe(true)
   })
 
   it('a selected text element shows font, align and colour panels', async () => {

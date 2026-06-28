@@ -34,7 +34,7 @@ describe('AlignOptions', () => {
 
   it('shows and edits the selected text element alignment', async () => {
     const store = usePagesStore()
-    store.addElement({ ...textEl('t1'), align: 'center' })
+    store.addElement({ ...textEl('t1'), align: 'center' as const })
     const w = mount(AlignOptions)
     // reflects the element's alignment
     expect(w.get('[data-role="align-center"]').classes().join(' ')).toContain('ring')

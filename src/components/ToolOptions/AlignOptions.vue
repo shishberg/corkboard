@@ -3,24 +3,25 @@ import { computed } from 'vue'
 import { useToolOptionsStore } from '@/stores/toolOptions'
 import { usePagesStore } from '@/stores/pages'
 import { AlignLeft, AlignCenter } from '@lucide/vue'
-import type { TextEl } from '@/stores/types'
+import type { TextEl, CalendarEl } from '@/stores/types'
 
 const opts = useToolOptionsStore()
 const store = usePagesStore()
 
-const selectedTextEl = computed((): TextEl | null => {
+// Alignment applies to any element that holds text — text boxes and calendars.
+const selectedAlignableEl = computed((): TextEl | CalendarEl | null => {
   const id = store.selectedElId
   if (!id) return null
   const el = store.selectedPage?.elements.find((e) => e.id === id)
-  return el?.type === 'text' ? (el as TextEl) : null
+  return el?.type === 'text' || el?.type === 'calendar' ? (el as TextEl | CalendarEl) : null
 })
 
-const value = computed(() => selectedTextEl.value?.align ?? opts.align)
+const value = computed(() => selectedAlignableEl.value?.align ?? opts.align)
 
 function pickAlign(align: 'left' | 'center') {
   opts.align = align
-  if (selectedTextEl.value) {
-    store.setElementAlign(selectedTextEl.value.id, align)
+  if (selectedAlignableEl.value) {
+    store.setElementAlign(selectedAlignableEl.value.id, align)
   }
 }
 </script>

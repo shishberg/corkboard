@@ -16,7 +16,7 @@ function winPointer(type: string, x: number, y: number): PointerEvent {
 }
 
 function calendarEl(id: string) {
-  return { id, type: 'calendar' as const, variant: 'agenda' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible' }
+  return { id, type: 'calendar' as const, variant: 'agenda' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible', align: 'center' as const }
 }
 
 function textEl(id: string) {

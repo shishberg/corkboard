@@ -8,7 +8,7 @@ import { useToolOptionsStore } from '@/stores/toolOptions'
 import { usePagesStore } from '@/stores/pages'
 
 function calendarEl(id: string) {
-  return { id, type: 'calendar' as const, variant: 'today' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible' }
+  return { id, type: 'calendar' as const, variant: 'today' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible', align: 'center' as const }
 }
 
 beforeEach(() => {

@@ -10,7 +10,7 @@ function imageEl(id: string): ImageEl {
 }
 
 function calendarEl(id: string): CalendarEl {
-  return { id, type: 'calendar', x: 0, y: 0, w: 300, h: 220, colour: 'black', variant: 'today', feedId: '', font: 'atkinson-hyperlegible' }
+  return { id, type: 'calendar', x: 0, y: 0, w: 300, h: 220, colour: 'black', variant: 'today', feedId: '', font: 'atkinson-hyperlegible', align: 'center' as const }
 }
 
 function textEl(id: string): TextEl {

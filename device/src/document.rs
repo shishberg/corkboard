@@ -80,6 +80,12 @@ impl Default for TextAlign {
     }
 }
 
+/// Default alignment for a calendar that predates the `align` field: the old
+/// date layout was fixed-centred, so legacy documents keep that look.
+fn center_align() -> TextAlign {
+    TextAlign::Center
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarEl {
@@ -96,6 +102,10 @@ pub struct CalendarEl {
     /// Font id for the calendar's text. Empty falls back to the default face.
     #[serde(default)]
     pub font: String,
+    /// Horizontal alignment of the calendar's text. Legacy documents default to
+    /// centre, matching the old fixed date layout.
+    #[serde(default = "center_align")]
+    pub align: TextAlign,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

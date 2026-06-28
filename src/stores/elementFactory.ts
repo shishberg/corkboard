@@ -56,7 +56,7 @@ export function makeElement(
   const base = { id: uid(), ...geom, colour: opts.colour }
   switch (tool) {
     case 'calendar':
-      return { ...base, type: 'calendar', variant: opts.calendarVariant, feedId: opts.feedId, font: opts.font }
+      return { ...base, type: 'calendar', variant: opts.calendarVariant, feedId: opts.feedId, font: opts.font, align: opts.align }
     case 'image':
       return { ...base, type: 'image', src: opts.imageId ?? '' }
     case 'text':
