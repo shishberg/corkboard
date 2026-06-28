@@ -46,14 +46,17 @@ pub fn render(
         for el in &page.elements {
             match el {
                 Element::Text(el) => {
-                    let px = (el.w.min(el.h) * 0.25).clamp(10.0, 96.0);
+                    // Auto-size the text to fill its box: the largest size at
+                    // which the wrapped text still fits width and height.
+                    let font = fonts.get(&el.font);
+                    let px = text::fit_font_size(font, &el.text, el.w, el.h, 10.0, 240.0);
                     let align = match el.align {
                         TextAlign::Left => text::Align::Left,
                         TextAlign::Center => text::Align::Center,
                     };
                     text::draw_text(
                         &mut pixmap,
-                        fonts.get(&el.font),
+                        font,
                         &el.text,
                         el.x, el.y, el.w, el.h,
                         px,

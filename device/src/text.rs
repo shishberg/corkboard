@@ -5,12 +5,89 @@ pub enum Align {
     Center,
 }
 
+/// Line height as a multiple of the pixel size. Shared by wrapping, fitting and
+/// drawing so they all agree.
+pub const LINE_HEIGHT: f32 = 1.25;
+
 /// Measure the pixel width of a single line of text at scale `px`.
 pub fn measure_line(font: &ab_glyph::FontVec, text: &str, px: f32) -> f32 {
     let scaled = font.as_scaled(PxScale::from(px));
     text.chars()
         .map(|ch| scaled.h_advance(scaled.glyph_id(ch)))
         .sum()
+}
+
+/// Word-wrap `text` to width `w` at scale `px`, breaking on whitespace. A single
+/// word wider than `w` is left on its own (over)long line rather than split.
+pub fn wrap_lines(font: &ab_glyph::FontVec, text: &str, px: f32, w: f32) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut cur_line = String::new();
+    let mut cur_w = 0.0f32;
+
+    for word in text.split_whitespace() {
+        let word_w = measure_line(font, word, px);
+        let space_w = if cur_line.is_empty() {
+            0.0
+        } else {
+            measure_line(font, " ", px)
+        };
+
+        if !cur_line.is_empty() && cur_w + space_w + word_w > w {
+            lines.push(std::mem::take(&mut cur_line));
+            cur_line.push_str(word);
+            cur_w = word_w;
+        } else {
+            if !cur_line.is_empty() {
+                cur_line.push(' ');
+                cur_w += space_w;
+            }
+            cur_line.push_str(word);
+            cur_w += word_w;
+        }
+    }
+    if !cur_line.is_empty() {
+        lines.push(cur_line);
+    }
+    lines
+}
+
+/// Largest integer pixel size in `[min_px, max_px]` at which `text` word-wraps
+/// to fit inside `(w, h)` — i.e. every wrapped line fits the width and all lines
+/// stack within the height (using LINE_HEIGHT). This auto-sizes text to fill its
+/// box: short text grows large, long text shrinks to fit. Falls back to `min_px`.
+pub fn fit_font_size(
+    font: &ab_glyph::FontVec,
+    text: &str,
+    w: f32,
+    h: f32,
+    min_px: f32,
+    max_px: f32,
+) -> f32 {
+    let min_px = min_px.round().max(1.0);
+    let max_px = max_px.round().max(min_px);
+    if text.trim().is_empty() || w <= 0.0 || h <= 0.0 {
+        return min_px;
+    }
+
+    // Fitting is monotonic in px (bigger size never fits better), so walk up from
+    // the minimum and stop at the first size that no longer fits.
+    let mut best = min_px;
+    let mut px = min_px;
+    while px <= max_px {
+        let lines = wrap_lines(font, text, px, w);
+        let total_h = lines.len() as f32 * px * LINE_HEIGHT;
+        let widest = lines
+            .iter()
+            .map(|l| measure_line(font, l, px))
+            .fold(0.0f32, f32::max);
+        if total_h <= h && widest <= w {
+            best = px;
+            px += 1.0;
+        } else {
+            break;
+        }
+    }
+    best
 }
 
 /// Render `text` into `pixmap` within the box (x, y, w, h).
@@ -45,38 +122,9 @@ pub fn draw_text(
         let scale = PxScale::from(px);
         let scaled = font.as_scaled(scale);
         let ascent = scaled.ascent();
-        let line_height = px * 1.25;
+        let line_height = px * LINE_HEIGHT;
 
-        // Word-wrap
-        let words: Vec<&str> = text.split_whitespace().collect();
-        let mut lines: Vec<String> = Vec::new();
-        let mut cur_line = String::new();
-        let mut cur_w = 0.0f32;
-
-        for word in &words {
-            let word_w = measure_line(font, word, px);
-            let space_w = if cur_line.is_empty() {
-                0.0
-            } else {
-                measure_line(font, " ", px)
-            };
-
-            if !cur_line.is_empty() && cur_w + space_w + word_w > w {
-                lines.push(cur_line.clone());
-                cur_line = word.to_string();
-                cur_w = word_w;
-            } else {
-                if !cur_line.is_empty() {
-                    cur_line.push(' ');
-                    cur_w += space_w;
-                }
-                cur_line.push_str(word);
-                cur_w += word_w;
-            }
-        }
-        if !cur_line.is_empty() {
-            lines.push(cur_line);
-        }
+        let lines = wrap_lines(font, text, px, w);
 
         let mut blits: Vec<(i32, i32, f32)> = Vec::new();
 
@@ -182,5 +230,55 @@ mod tests {
         });
 
         assert!(has_reddish, "expected at least one reddish pixel after drawing red text");
+    }
+
+    fn test_font() -> crate::fonts::Fonts {
+        crate::fonts::Fonts::load()
+    }
+
+    #[test]
+    fn fit_grows_for_short_text_in_a_bigger_box() {
+        let fonts = test_font();
+        let font = fonts.get("atkinson-hyperlegible");
+        let small = fit_font_size(font, "Hi", 100.0, 40.0, 10.0, 240.0);
+        let big = fit_font_size(font, "Hi", 400.0, 200.0, 10.0, 240.0);
+        assert!(big > small, "bigger box should give bigger font ({big} vs {small})");
+    }
+
+    #[test]
+    fn fit_shrinks_for_more_text() {
+        let fonts = test_font();
+        let font = fonts.get("atkinson-hyperlegible");
+        let short = fit_font_size(font, "Hi", 220.0, 90.0, 10.0, 240.0);
+        let long = fit_font_size(
+            font,
+            "The quick brown fox jumps over the lazy dog again and again",
+            220.0,
+            90.0,
+            10.0,
+            240.0,
+        );
+        assert!(long < short, "more text should shrink the font ({long} vs {short})");
+    }
+
+    #[test]
+    fn fit_result_actually_fits_and_grows_past_the_floor() {
+        let fonts = test_font();
+        let font = fonts.get("atkinson-hyperlegible");
+        let (w, h) = (240.0, 80.0);
+        let px = fit_font_size(font, "Hello World", w, h, 10.0, 240.0);
+        let lines = wrap_lines(font, "Hello World", px, w);
+        let total_h = lines.len() as f32 * px * LINE_HEIGHT;
+        let widest = lines.iter().map(|l| measure_line(font, l, px)).fold(0.0, f32::max);
+        assert!(total_h <= h, "fitted text must not overflow height");
+        assert!(widest <= w, "fitted text must not overflow width");
+        assert!(px > 10.0, "short text should grow well above the floor, got {px}");
+    }
+
+    #[test]
+    fn fit_empty_text_returns_the_floor() {
+        let fonts = test_font();
+        let font = fonts.get("atkinson-hyperlegible");
+        assert_eq!(fit_font_size(font, "   ", 200.0, 100.0, 10.0, 240.0), 10.0);
     }
 }

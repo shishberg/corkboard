@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import type { TextEl } from '@/stores/types'
 import { usePagesStore } from '@/stores/pages'
+import { fitFontSize, LINE_HEIGHT } from '@/lib/textFit'
 
 const props = withDefaults(defineProps<{ el: TextEl; editing?: boolean }>(), {
   editing: false,
@@ -12,8 +13,35 @@ const emit = defineEmits<{ stopEditing: [] }>()
 const store = usePagesStore()
 const editRef = ref<HTMLElement | null>(null)
 
-// Mirror CalendarWidget's baseSize: scale font with the smaller dimension
-const baseSize = computed(() => `${Math.max(8, Math.min(props.el.w, props.el.h) * 0.25)}px`)
+// Auto-size the text to fill the box (same fit as the device renderer) so the
+// preview matches the panel and text isn't perpetually tiny. Recompute whenever
+// the text, box or font changes.
+const fontPx = ref(10)
+function recomputeFit() {
+  fontPx.value = fitFontSize(props.el.text || '', props.el.w, props.el.h, props.el.font)
+}
+watch(
+  () => [props.el.text, props.el.w, props.el.h, props.el.font] as const,
+  recomputeFit,
+  { immediate: true },
+)
+// Text measurement only reflects the real font once it has loaded; before that
+// the browser falls back to narrower metrics and the fit is a pixel or two too
+// large — enough to flip a line and overflow. No single font-ready signal is
+// reliable on its own (`fonts.ready` can resolve before the font is even
+// requested), so recompute on every signal we have: an explicit font load,
+// `fonts.ready`, and a double rAF after the next layout.
+onMounted(() => {
+  recomputeFit()
+  const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
+  if (fonts) {
+    fonts.load(`16px ${props.el.font}`).then(recomputeFit, recomputeFit)
+    fonts.ready.then(recomputeFit)
+  }
+  requestAnimationFrame(() => requestAnimationFrame(recomputeFit))
+})
+
+const baseSize = computed(() => `${fontPx.value}px`)
 
 onMounted(() => {
   if (editRef.value) {
@@ -83,6 +111,7 @@ function onKeydown(e: KeyboardEvent) {
         fontFamily: el.font,
         textAlign: el.align,
         color: el.colour,
+        lineHeight: String(LINE_HEIGHT),
         whiteSpace: 'pre-wrap',
         outline: 'none',
         cursor: editing ? 'text' : 'default',
