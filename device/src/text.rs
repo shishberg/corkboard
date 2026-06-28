@@ -67,6 +67,9 @@ impl Faces {
             .expect("faces map is never empty")
     }
 
+    /// The default face. Only tests need this directly — render paths resolve a
+    /// specific font via `get`, which already falls back to the default.
+    #[cfg(test)]
     pub fn default(&self) -> &Face {
         self.get(&self.default_id)
     }
