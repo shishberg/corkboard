@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { makeElement, makeDrawingElement } from './elementFactory'
+import { makeElement, makeDrawingElement, imagePlacement } from './elementFactory'
 
 const opts = { calendarVariant: 'week' as const, colour: 'red' as const, feedId: 'family', font: 'atkinson-hyperlegible', align: 'left' as const }
 const size = { w: 800, h: 480 }
@@ -57,6 +57,36 @@ describe('makeElement', () => {
   it('text element carries the colour from opts', () => {
     const el = makeElement('text', opts, size)
     expect(el.colour).toBe('red')
+  })
+})
+
+describe('imagePlacement', () => {
+  const page = { w: 800, h: 480 }
+
+  it('preserves the image aspect ratio', () => {
+    const r = imagePlacement(400, 200, page) // 2:1
+    expect(r.w / r.h).toBeCloseTo(2)
+  })
+
+  it('fits within half the page and centres the box', () => {
+    const r = imagePlacement(400, 200, page)
+    // Width binds first: 0.5*800 = 400 wide, 200 tall.
+    expect(r.w).toBeCloseTo(400)
+    expect(r.h).toBeCloseTo(200)
+    expect(r.x).toBeCloseTo((800 - r.w) / 2)
+    expect(r.y).toBeCloseTo((480 - r.h) / 2)
+  })
+
+  it('lets height bind first for tall images', () => {
+    const r = imagePlacement(100, 400, page) // 1:4, very tall
+    // Height binds: 0.5*480 = 240 tall, 60 wide.
+    expect(r.h).toBeCloseTo(240)
+    expect(r.w).toBeCloseTo(60)
+  })
+
+  it('falls back to a square for degenerate dimensions', () => {
+    const r = imagePlacement(0, 0, page)
+    expect(r.w).toBeCloseTo(r.h)
   })
 })
 

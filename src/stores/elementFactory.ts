@@ -29,6 +29,22 @@ export function defaultSize(tool: 'calendar' | 'image' | 'text'): { w: number; h
   return { ...SIZES[tool] }
 }
 
+// Default rect for a freshly-uploaded image: scale its natural size to fit
+// within half the page (in whichever dimension binds first), preserving aspect,
+// and centre it. Keeps the placed image undistorted from the moment it appears.
+export function imagePlacement(
+  natW: number,
+  natH: number,
+  page: { w: number; h: number },
+): Rect {
+  const w0 = natW > 0 ? natW : 1
+  const h0 = natH > 0 ? natH : 1
+  const scale = Math.min((page.w * 0.5) / w0, (page.h * 0.5) / h0)
+  const w = w0 * scale
+  const h = h0 * scale
+  return { x: (page.w - w) / 2, y: (page.h - h) / 2, w, h }
+}
+
 export function makeElement(
   tool: 'calendar' | 'image' | 'text',
   opts: FactoryOpts,

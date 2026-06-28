@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore, ensureToolOptionsPersistence } from '@/stores/toolOptions'
+import { addImageFromFile } from '@/lib/imageTool'
 import type { ToolId, EpaperColour } from '@/stores/types'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
@@ -11,17 +12,33 @@ import {
 } from '@lucide/vue'
 import CalendarOptions from './ToolOptions/CalendarOptions.vue'
 import DrawOptions from './ToolOptions/DrawOptions.vue'
-import ImageOptions from './ToolOptions/ImageOptions.vue'
 import TextOptions from './ToolOptions/TextOptions.vue'
 
 const store = usePagesStore()
 const opts = useToolOptionsStore()
 onMounted(() => ensureToolOptionsPersistence())
 
+const imageInput = ref<HTMLInputElement | null>(null)
+
 function pickTool(tool: ToolId) {
   // Selecting a tool only makes it active; elements are created by drawing on
   // the canvas (see EditorCanvas).
   store.setActiveTool(tool)
+}
+
+// The image tool isn't a draw mode — it opens the file dialog immediately and
+// drops the uploaded image onto the page.
+function pickImage() {
+  const input = imageInput.value
+  if (!input) return
+  input.value = '' // allow re-picking the same file
+  input.click()
+}
+
+async function onImageChosen(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  await addImageFromFile(file)
 }
 
 const palette: EpaperColour[] = ['black', 'white', 'red', 'yellow', 'blue', 'green']
@@ -99,20 +116,28 @@ function pickColour(c: EpaperColour) {
         <PopoverContent side="right" class="w-48"><DrawOptions /></PopoverContent>
       </Popover>
 
-      <!-- Image -->
-      <Popover>
-        <PopoverTrigger as-child>
+      <!-- Image: one click opens the file dialog; uploading drops the image
+           straight onto the page (no draw-to-place, no options popover). -->
+      <Tooltip>
+        <TooltipTrigger as-child>
           <button
             data-tool="image"
             class="flex h-9 w-9 items-center justify-center rounded hover:bg-neutral-200"
-            :class="store.activeTool === 'image' ? 'bg-neutral-200' : ''"
-            @click="pickTool('image')"
+            @click="pickImage"
           >
             <ImageIcon class="h-5 w-5" />
           </button>
-        </PopoverTrigger>
-        <PopoverContent side="right" class="w-48"><ImageOptions /></PopoverContent>
-      </Popover>
+        </TooltipTrigger>
+        <TooltipContent side="right">Add image</TooltipContent>
+      </Tooltip>
+      <input
+        ref="imageInput"
+        data-role="image-file"
+        type="file"
+        accept="image/*"
+        class="hidden"
+        @change="onImageChosen"
+      />
 
       <!-- Text -->
       <Popover>

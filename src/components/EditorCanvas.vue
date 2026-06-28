@@ -108,7 +108,7 @@ function surfaceLocal(e: PointerEvent) {
 // --- Draw-to-place: drag on the surface to create the active tool's element ---
 let createStart = { x: 0, y: 0 }
 let createStartRaw = { x: 0, y: 0 }
-let createTool: 'calendar' | 'image' | 'text' = 'calendar'
+let createTool: 'calendar' | 'text' = 'calendar'
 let creatingId: string | null = null
 // Below this many screen pixels of movement we treat the gesture as a click,
 // not a drag. Measured in raw CSS pixels so zoom doesn't change the decision.
@@ -117,13 +117,13 @@ const CREATE_MIN = 8
 
 function onSurfacePointerDown(e: PointerEvent) {
   const tool = store.activeTool
-  if (tool === 'calendar' || tool === 'image' || tool === 'text') {
+  if (tool === 'calendar' || tool === 'text') {
     createTool = tool
     createStart = surfaceLocal(e)
     createStartRaw = { x: e.clientX, y: e.clientY }
     const el = makeElement(
       tool,
-      { calendarVariant: opts.calendarVariant, colour: opts.colour, feedId: opts.feedId, font: opts.font, align: opts.align, imageId: opts.imageId },
+      { calendarVariant: opts.calendarVariant, colour: opts.colour, feedId: opts.feedId, font: opts.font, align: opts.align },
       size.value,
       { x: createStart.x, y: createStart.y, w: CREATE_MIN, h: CREATE_MIN },
     )
