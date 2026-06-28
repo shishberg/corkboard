@@ -33,6 +33,12 @@ pub fn draw_text(
     let pw = pixmap.width();
     let ph = pixmap.height();
 
+    // Snap the pixel size to an integer. Outline fonts have no hinting here, so
+    // a whole-pixel em makes stems land on consistent pixel counts instead of
+    // smearing across fractional boundaries — the main lever for crisp 1-bit
+    // text at small sizes.
+    let px = px.round().max(1.0);
+
     // Collect glyph blits first so we can drop the scaled-font borrow before
     // calling pixmap.pixels_mut().
     let glyph_blits: Vec<(i32, i32, f32)> = {
@@ -80,7 +86,9 @@ pub fn draw_text(
             if line_bottom > y + h {
                 break;
             }
-            let baseline_y = line_top + ascent;
+            // Snap the baseline to a whole pixel row so horizontal stems and the
+            // x-height line don't straddle two rows.
+            let baseline_y = (line_top + ascent).round();
 
             let line_w = measure_line(font, line, px);
             let x_start = match align {
@@ -92,8 +100,11 @@ pub fn draw_text(
             for ch in line.chars() {
                 let glyph_id = scaled.glyph_id(ch);
                 let advance = scaled.h_advance(glyph_id);
+                // Accumulate advances at full precision (keeps spacing even) but
+                // grid-fit each glyph's origin to a whole pixel column so vertical
+                // stems stay sharp.
                 let glyph = glyph_id
-                    .with_scale_and_position(scale, ab_glyph::point(gx, baseline_y));
+                    .with_scale_and_position(scale, ab_glyph::point(gx.round(), baseline_y));
 
                 if let Some(outline) = font.outline_glyph(glyph) {
                     let bounds = outline.px_bounds();
@@ -111,9 +122,16 @@ pub fn draw_text(
         blits
     };
 
-    // Blit into the pixmap using binary coverage (threshold at 0.5).
-    // Anti-aliased blending produces intermediate grey pixels that quantise
-    // to green on the 6-colour e-paper palette; threshold prevents that.
+    // Blit into the pixmap as 1-bit text: a pixel turns full colour when the
+    // glyph covers enough of it, otherwise it's left untouched. We never write
+    // intermediate greys — anti-aliased edges would quantise to green on the
+    // 6-colour palette, and grey text is unreadable on e-paper anyway.
+    //
+    // The threshold is below 0.5 ("stem darkening"): at small sizes thin stems
+    // cover well under half a pixel and would drop out at 0.5, so a lower cutoff
+    // keeps them present and the text a touch heavier, which reads better on the
+    // panel. FreeType applies the same idea for small monochrome text.
+    const COVERAGE_ON: f32 = 0.4;
     let [fr, fg, fb] = colour;
 
     let pixels = pixmap.pixels_mut();
@@ -121,12 +139,12 @@ pub fn draw_text(
         if bx < 0 || by < 0 || bx >= pw as i32 || by >= ph as i32 {
             continue;
         }
-        if cov >= 0.5 {
+        if cov >= COVERAGE_ON {
             let idx = by as usize * pw as usize + bx as usize;
             pixels[idx] =
                 tiny_skia::ColorU8::from_rgba(fr, fg, fb, 255).premultiply();
         }
-        // coverage < 0.5: leave the background pixel unchanged
+        // below the threshold: leave the background pixel unchanged
     }
 }
 
