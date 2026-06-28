@@ -37,7 +37,7 @@ async function publish() {
         <component :is="(store.selectedPage?.orientation ?? 'landscape') === 'landscape' ? RectangleHorizontal : RectangleVertical" class="h-4 w-4" />
         {{ store.selectedPage?.orientation ?? 'landscape' }}
       </button>
-      <Button data-role="preview" as="a" href="/preview.png" target="_blank" rel="noopener" variant="outline" size="sm">Preview</Button>
+      <Button data-role="preview" as="a" href="/preview" target="_blank" rel="noopener" variant="outline" size="sm">Preview</Button>
       <Button data-role="publish" size="sm" @click="publish">Publish</Button>
     </div>
   </header>

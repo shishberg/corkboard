@@ -50,10 +50,10 @@ describe('TopBar', () => {
     expect(store.livePageId).toBe(second)
   })
 
-  it('has a Preview link that opens preview.png in a new tab', () => {
+  it('has a Preview link that opens the live preview page in a new tab', () => {
     const w = mount(TopBar)
     const preview = w.get('[data-role="preview"]')
-    expect(preview.attributes('href')).toBe('/preview.png')
+    expect(preview.attributes('href')).toBe('/preview')
     expect(preview.attributes('target')).toBe('_blank')
   })
 })
