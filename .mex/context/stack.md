@@ -24,7 +24,9 @@ last_updated: 2026-06-28
 - **Vite** + **Vue** 3 (`<script setup>`) — build tool and framework for the web UI.
 - **Pinia** — state management. The document state (`usePagesStore`) is the single source of truth and the draft page-state contract.
 - **Vitest** + **@vue/test-utils** + **jsdom** — testing.
-- *axum* (Rust device server + renderer) — the device-side language and web framework (decided 2026-06-27; supersedes the earlier tentative Python plan). Separate codebase in `device/`; built and working (serves the editor + JSON API + `preview.png`, renders to the 6-colour panel). Renderer uses `tiny-skia` + `ab_glyph` + the `image` crate. Only the `Panel` SPI driver is deferred (needs hardware).
+- *axum* (Rust device server + renderer) — the device-side language and web framework (decided 2026-06-27; supersedes the earlier tentative Python plan). Separate codebase in `device/`; built and working (serves the editor + JSON API + `preview.png`, renders to the 6-colour panel). Renderer uses `tiny-skia` (compositing) + `freetype-rs` (text) + the `image` crate. Only the `Panel` SPI driver is deferred (needs hardware).
+
+  Text is rendered with *FreeType in monochrome mode* (`FT_LOAD_TARGET_MONO`), not an unhinted outline rasteriser. The panel is 1-bit-per-channel (6 colours, no greys), so anti-aliasing isn't available; FreeType's hinting grid-fits stems to whole pixels, which is what keeps small text crisp instead of jagged/broken. We use `freetype-rs` with the `bundled` feature — it compiles FreeType from source (needs a C compiler at build time, no system lib or `cmake`). FreeType faces are `!Send`/`!Sync`, so `Fonts` (in shared state) stores font *bytes* and the renderer builds faces locally per render pass (`text::Faces`). (Replaced `ab_glyph` on 2026-06-28 — it had no hinting, so 1-bit text looked rough.)
 
 ## Key Libraries
 - **Tailwind CSS v4** — via the `@tailwindcss/vite` plugin, CSS-first config (no `tailwind.config.js` / `postcss.config.js`). Theme tokens live in `src/style.css`; base color `zinc`.

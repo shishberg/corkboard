@@ -31,6 +31,12 @@ pub fn render(
 ) -> anyhow::Result<Vec<u8>> {
     let (w, h) = doc.orientation_size();
 
+    // FreeType faces for this render pass. Built locally because faces are
+    // !Send/!Sync and can't live in the shared `Fonts`.
+    let ft = freetype::Library::init()
+        .map_err(|e| anyhow::anyhow!("failed to init FreeType: {e}"))?;
+    let faces = text::Faces::build(&ft, fonts);
+
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| anyhow::anyhow!("failed to create pixmap {}×{}", w, h))?;
 
@@ -48,7 +54,7 @@ pub fn render(
                 Element::Text(el) => {
                     // Auto-size the text to fill its box: the largest size at
                     // which the wrapped text still fits width and height.
-                    let font = fonts.get(&el.font);
+                    let font = faces.get(&el.font);
                     let px = text::fit_font_size(font, &el.text, el.w, el.h, 10.0, 240.0);
                     let align = match el.align {
                         TextAlign::Left => text::Align::Left,
@@ -82,7 +88,7 @@ pub fn render(
                             let date_line_h = date_px * 1.25;
                             text::draw_text(
                                 &mut pixmap,
-                                fonts.default_font(),
+                                faces.default(),
                                 &date_str,
                                 el.x, el.y, el.w, date_line_h,
                                 date_px,
@@ -112,8 +118,8 @@ pub fn render(
                                 lines
                             };
 
-                            // Floor at 11px: below ~10px the unhinted outline
-                            // font can't render legibly as 1-bit on the panel.
+                            // Floor at 11px: even hinted, 1-bit text below ~10px
+                            // has too few pixels to read on the panel.
                             let small_px = (el.w.min(el.h) * 0.09).clamp(11.0, 32.0);
                             let small_line_h = small_px * 1.25;
                             let mut y_pos = el.y;
@@ -124,7 +130,7 @@ pub fn render(
                                 }
                                 text::draw_text(
                                     &mut pixmap,
-                                    fonts.default_font(),
+                                    faces.default(),
                                     line,
                                     el.x, y_pos, el.w, small_line_h,
                                     small_px,
@@ -150,7 +156,7 @@ pub fn render(
                             };
                             draw_agenda(
                                 &mut pixmap,
-                                fonts.default_font(),
+                                faces.default(),
                                 feed,
                                 el.x, el.y, el.w, el.h,
                                 colour,
@@ -443,7 +449,7 @@ fn agenda_event_line(time: &str, title: &str) -> String {
 /// clipped. Each line is drawn single-line (clipped to width, no wrap).
 fn draw_agenda(
     pixmap: &mut tiny_skia::Pixmap,
-    font: &ab_glyph::FontVec,
+    font: &text::Face,
     feed: &ResolvedFeed,
     x: f32,
     y: f32,

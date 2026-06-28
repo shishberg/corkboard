@@ -4,8 +4,11 @@ use std::collections::HashMap;
 static EMBEDDED: &[u8] =
     include_bytes!("../../public/fonts/atkinson-hyperlegible/Regular.ttf");
 
+/// Loaded font files, keyed by id. We keep the raw bytes (not a parsed font):
+/// the renderer builds FreeType faces from these per render pass, because
+/// FreeType faces are `!Send`/`!Sync` and `Fonts` lives in shared state.
 pub struct Fonts {
-    fonts: HashMap<String, ab_glyph::FontVec>,
+    fonts: HashMap<String, Vec<u8>>,
     default_id: String,
 }
 
@@ -17,25 +20,20 @@ impl Fonts {
         }
     }
 
-    pub fn get(&self, id: &str) -> &ab_glyph::FontVec {
-        self.fonts
-            .get(id)
-            .or_else(|| self.fonts.get(&self.default_id))
-            .or_else(|| self.fonts.values().next())
-            .expect("fonts map is never empty")
+    pub fn default_id(&self) -> &str {
+        &self.default_id
     }
 
-    pub fn default_font(&self) -> &ab_glyph::FontVec {
-        self.get(&self.default_id)
+    /// All (id, bytes) pairs — used to build the per-render face set.
+    pub fn entries(&self) -> impl Iterator<Item = (&String, &Vec<u8>)> {
+        self.fonts.iter()
     }
 
     // ------------------------------------------------------------------ //
 
     fn embedded_only() -> Self {
-        let font = ab_glyph::FontVec::try_from_vec(EMBEDDED.to_vec())
-            .expect("embedded font bytes are always valid");
         let mut fonts = HashMap::new();
-        fonts.insert("atkinson-hyperlegible".to_string(), font);
+        fonts.insert("atkinson-hyperlegible".to_string(), EMBEDDED.to_vec());
         Fonts {
             fonts,
             default_id: "atkinson-hyperlegible".to_string(),
@@ -50,7 +48,7 @@ impl Fonts {
         let manifest_text = std::fs::read_to_string(fonts_dir.join("manifest.json"))?;
         let manifest: Manifest = serde_json::from_str(&manifest_text)?;
 
-        let mut font_map: HashMap<String, ab_glyph::FontVec> = HashMap::new();
+        let mut font_map: HashMap<String, Vec<u8>> = HashMap::new();
         let mut default_id = "atkinson-hyperlegible".to_string();
 
         for entry in &manifest.fonts {
@@ -65,9 +63,7 @@ impl Fonts {
 
             if let Some(face) = face {
                 let bytes = std::fs::read(fonts_dir.join(&face.file))?;
-                let font = ab_glyph::FontVec::try_from_vec(bytes)
-                    .map_err(|e| anyhow::anyhow!("invalid font {:?}: {:?}", face.file, e))?;
-                font_map.insert(entry.id.clone(), font);
+                font_map.insert(entry.id.clone(), bytes);
             }
         }
 
@@ -111,21 +107,18 @@ mod tests {
     #[test]
     fn default_font_loads() {
         let fonts = Fonts::load();
-        let _ = fonts.get("atkinson-hyperlegible"); // should not panic
+        assert!(fonts.entries().count() >= 1);
+        assert!(!fonts.default_id().is_empty());
     }
 
     #[test]
-    fn unknown_id_returns_default() {
-        let fonts = Fonts::load();
-        let _ = fonts.get("nonexistent-id-xyz"); // should not panic
-    }
-
-    #[test]
-    fn missing_dir_falls_back_to_embedded() {
-        // Override the env var to point nowhere.
-        // This test can't run in parallel with other CORKBOARD_FONTS setters,
-        // but it at minimum validates the embedded fallback path by calling it directly.
+    fn embedded_fallback_has_the_default_font() {
+        // Validate the embedded fallback path directly (can't toggle the env var
+        // safely in parallel with other CORKBOARD_FONTS setters).
         let fonts = Fonts::embedded_only();
-        let _ = fonts.get("atkinson-hyperlegible");
+        assert_eq!(fonts.default_id(), "atkinson-hyperlegible");
+        let (id, bytes) = fonts.entries().next().unwrap();
+        assert_eq!(id, "atkinson-hyperlegible");
+        assert!(!bytes.is_empty());
     }
 }

@@ -12,7 +12,7 @@ edges:
     condition: when a decision relates to system structure
   - target: context/stack.md
     condition: when a decision relates to technology choice
-last_updated: 2026-06-27
+last_updated: 2026-06-28
 ---
 
 # Decisions
@@ -21,6 +21,14 @@ last_updated: 2026-06-27
      new entry above it. The history is the event clock. -->
 
 ## Decision Log
+
+### Device text rendering: FreeType monochrome (hinted) — SUPERSEDES `ab_glyph`
+**Date:** 2026-06-28
+**Status:** Active
+**Decision:** The device renders all text with **FreeType in monochrome mode** (`FT_LOAD_TARGET_MONO`) via `freetype-rs` (`bundled` feature, compiled from source). Replaces `ab_glyph`. `Fonts` (shared state) stores font *bytes*; the renderer builds `!Send` faces locally per render pass (`text::Faces`). Default font is unchanged (Atkinson Hyperlegible).
+**Reasoning:** The panel is 1-bit-per-channel (6 colours, no greys), so text can't be anti-aliased. `ab_glyph` has no hinting — it rasterises raw outlines and thresholds coverage, so small 1-bit text came out jagged and broken (mangled zeros, patchy stems). Best practice for un-antialiased small text is a bitmap font *or* a hinting rasteriser; FreeType's MONO mode is the reference implementation, grid-fitting stems to whole pixels. Pixel fonts through `ab_glyph` weren't actually crisp (it renders their outlines, not bitmap strikes) and don't fill auto-sized boxes. Result: crisp text, and editor↔device parity IoU rose 0.46→0.65 (hinted ink density now matches the browser).
+**Alternatives considered:** `swash`/`skrifa` (pure-Rust, hinting — but tuned for grayscale AA; hint-then-threshold is worse than a dedicated mono path); `font-kit` (delegates to the platform rasteriser → non-deterministic Mac vs Pi); `rusttype` (no hinting, `ab_glyph`'s predecessor); a bitmap/pixel font (crisp but fixed-size/retro, all-caps in the ones tried). Keeping `ab_glyph` (rejected — the root cause of "rubbish" text).
+**Consequences:** Build needs a C compiler (no system FreeType or `cmake` — `bundled` builds it; the Pi has `libfreetype` trivially anyway). Faces are rebuilt each render (cheap; render is occasional). `text.rs` keeps the same public API (`measure_line`/`wrap_lines`/`fit_font_size`/`draw_text`) so `render.rs` and the agenda layout were untouched. The editor preview is still browser-AA (parity is layout-based, not pixel-exact).
 
 ### Target display: Waveshare 7.3" E6 (Spectra 6), 800×480, 6-colour
 **Date:** 2026-06-27 (recorded; the panel was chosen in the 2026-06-23 web-UI design round but never made it into `.mex/`)
