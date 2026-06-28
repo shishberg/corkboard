@@ -53,4 +53,43 @@ describe('useDraggableResizable', () => {
 
     expect(rect).toEqual({ x: 0, y: 0, w: 130, h: 90 })
   })
+
+  it('locks resize to the given aspect ratio', () => {
+    let rect = { x: 0, y: 0, w: 100, h: 50 } // 2:1, but aspect lock overrides
+    const onUpdate = vi.fn((r) => (rect = r))
+    const dr = useDraggableResizable({
+      getRect: () => rect,
+      onUpdate,
+      scale: () => 1,
+      aspect: () => 2, // width = 2 × height
+    })
+
+    dr.startResize(pointer('pointerdown', 100, 50))
+    // Drag width +60 (→160) and height +40 (height is ignored under lock).
+    window.dispatchEvent(pointer('pointermove', 160, 90))
+    window.dispatchEvent(pointer('pointerup', 160, 90))
+
+    expect(rect.w).toBe(160)
+    expect(rect.h).toBe(80) // 160 / 2, derived from width — not 90
+  })
+
+  it('respects the minimum size while keeping aspect', () => {
+    let rect = { x: 0, y: 0, w: 100, h: 50 }
+    const onUpdate = vi.fn((r) => (rect = r))
+    const dr = useDraggableResizable({
+      getRect: () => rect,
+      onUpdate,
+      scale: () => 1,
+      aspect: () => 4, // wide: width = 4 × height
+    })
+
+    // Shrink width to the minimum; the derived height (20/4 = 5) would fall
+    // below MIN, so the box is pushed back up to keep both ≥ MIN at the ratio.
+    dr.startResize(pointer('pointerdown', 100, 50))
+    window.dispatchEvent(pointer('pointermove', 0, 0))
+    window.dispatchEvent(pointer('pointerup', 0, 0))
+
+    expect(rect.h).toBe(20) // MIN
+    expect(rect.w).toBe(80) // MIN * 4
+  })
 })

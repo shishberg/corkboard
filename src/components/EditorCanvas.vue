@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore } from '@/stores/toolOptions'
 import { makeElement, makeDrawingElement, defaultSize } from '@/stores/elementFactory'
@@ -9,6 +9,7 @@ import ImageWidget from './widgets/ImageWidget.vue'
 import DrawingWidget from './widgets/DrawingWidget.vue'
 import TextWidget from './widgets/TextWidget.vue'
 import DrawingLayer from './widgets/DrawingLayer.vue'
+import type { ImageEl } from '@/stores/types'
 
 const store = usePagesStore()
 const opts = useToolOptionsStore()
@@ -36,6 +37,19 @@ watch(
 
 const size = computed(() => store.pageSize)
 const elements = computed(() => store.selectedPage?.elements ?? [])
+
+// Natural width/height ratio of each image element, learned when its <img>
+// loads. Used to lock resizing to the image's aspect so the editor box matches
+// what the device renders (which stretches the image to fill the box). When an
+// image first loads, snap its box height to the ratio so it isn't distorted.
+const imageAspect = reactive<Record<string, number>>({})
+function onImageLoaded(el: ImageEl, natural: { w: number; h: number }) {
+  const aspect = natural.w / natural.h
+  imageAspect[el.id] = aspect
+  if (el.h <= 0 || Math.abs(el.w / el.h - aspect) > 0.01) {
+    store.updateElement(el.id, { h: el.w / aspect })
+  }
+}
 
 function recompute() {
   const el = container.value
@@ -191,12 +205,17 @@ function onStroke(points: { x: number; y: number }[]) {
         :scale="scale"
         :interactive="store.activeTool === 'select'"
         :editing="editingElId === el.id"
+        :aspect="el.type === 'image' ? imageAspect[el.id] : undefined"
         @select="store.selectElement($event)"
         @update="store.updateElement(el.id, $event)"
         @dblclick="enterTextEdit(el)"
       >
         <CalendarWidget v-if="el.type === 'calendar'" :el="el" />
-        <ImageWidget v-else-if="el.type === 'image'" :el="el" />
+        <ImageWidget
+          v-else-if="el.type === 'image'"
+          :el="el"
+          @loaded="onImageLoaded(el, $event)"
+        />
         <DrawingWidget v-else-if="el.type === 'drawing'" :el="el" />
         <TextWidget
           v-else-if="el.type === 'text'"

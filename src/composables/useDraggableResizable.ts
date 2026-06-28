@@ -4,6 +4,9 @@ interface Opts {
   getRect: () => Rect
   onUpdate: (rect: Rect) => void
   scale: () => number
+  // Optional width/height ratio to lock resizing to (e.g. an image's aspect).
+  // When set, resize keeps this ratio so the box can't distort the content.
+  aspect?: () => number | undefined
 }
 
 const MIN = 20
@@ -23,11 +26,23 @@ export function useDraggableResizable(opts: Opts) {
       if (mode === 'drag') {
         opts.onUpdate({ ...start, x: start.x + dx, y: start.y + dy })
       } else {
-        opts.onUpdate({
-          ...start,
-          w: Math.max(MIN, start.w + dx),
-          h: Math.max(MIN, start.h + dy),
-        })
+        const aspect = opts.aspect?.()
+        if (aspect && aspect > 0) {
+          // Drive width from the pointer, derive height to keep the ratio.
+          let w = Math.max(MIN, start.w + dx)
+          let h = w / aspect
+          if (h < MIN) {
+            h = MIN
+            w = MIN * aspect
+          }
+          opts.onUpdate({ ...start, w, h })
+        } else {
+          opts.onUpdate({
+            ...start,
+            w: Math.max(MIN, start.w + dx),
+            h: Math.max(MIN, start.h + dy),
+          })
+        }
       }
     }
     const up = () => {

@@ -11,6 +11,7 @@ const props = defineProps<{
   scale: number
   interactive?: boolean
   editing?: boolean
+  aspect?: number
 }>()
 
 const emit = defineEmits<{
@@ -22,6 +23,7 @@ const dr = useDraggableResizable({
   getRect: () => ({ x: props.x, y: props.y, w: props.w, h: props.h }),
   onUpdate: (rect) => emit('update', rect),
   scale: () => props.scale,
+  aspect: () => props.aspect,
 })
 
 function onPointerDown(e: PointerEvent) {
