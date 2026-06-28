@@ -16,14 +16,13 @@ beforeEach(() => {
 })
 
 describe('widgets', () => {
-  it('CalendarWidget renders an agenda layout with 7 day headings', () => {
+  it('CalendarWidget agenda shows only days with events, skipping empty ones', () => {
     const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'agenda', x: 0, y: 0, w: 300, h: 400, feedId: '', colour: 'black' }
     const w = mount(CalendarWidget, { props: { el } })
-    const days = w.findAll('[data-role="day"]')
-    expect(days.length).toBe(7)
-    expect(days[0].text()).toBe('Today')
-    expect(days[1].text()).toBe('Tomorrow')
-    expect(days[2].text()).toBe('Monday')
+    const days = w.findAll('[data-role="day"]').map((d) => d.text())
+    // The sample has no events on Wednesday, so it is skipped.
+    expect(days).toEqual(['Today', 'Tomorrow', 'Monday', 'Tuesday', 'Thursday', 'Friday'])
+    expect(days).not.toContain('Wednesday')
   })
 
   it('CalendarWidget agenda formats event times as 12-hour and includes all-day items', () => {

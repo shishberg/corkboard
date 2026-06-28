@@ -18,10 +18,13 @@ const AGENDA_LH = 1.3
 const AGENDA_MIN = 11
 const AGENDA_MAX = 22
 const AGENDA_INSET = 4
-const agenda = computed(() => sampleAgenda())
+// Only days that have events are shown — empty days are skipped entirely.
+const agenda = computed(() => sampleAgenda().filter((d) => d.events.length > 0))
 const agendaPx = computed(() => {
-  const totalEvents = agenda.value.reduce((n, d) => n + d.events.length, 0)
-  const linesEquiv = 7 + totalEvents + 3 // 7 headings + events + 6 half-line gaps
+  const days = agenda.value
+  if (days.length === 0) return AGENDA_MIN
+  const totalEvents = days.reduce((n, d) => n + d.events.length, 0)
+  const linesEquiv = days.length + totalEvents + 0.5 * (days.length - 1)
   const availH = Math.max(1, props.el.h - 2 * AGENDA_INSET)
   return Math.min(AGENDA_MAX, Math.max(AGENDA_MIN, Math.floor(availH / (AGENDA_LH * linesEquiv))))
 })

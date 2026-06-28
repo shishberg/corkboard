@@ -451,10 +451,15 @@ fn draw_agenda(
     h: f32,
     colour: [u8; 3],
 ) {
-    let total_events: usize = feed.week.iter().map(|d| d.len()).sum();
-    // 7 headings + all events, plus a half-line gap before each heading after
-    // the first (6 gaps = 3 line-equivalents). Solve for the px that fits.
-    let lines_equiv = (7 + total_events) as f32 + 3.0;
+    // Only days that have events are shown — empty days are skipped entirely.
+    let shown: Vec<usize> = (0..7).filter(|&i| !feed.week[i].is_empty()).collect();
+    if shown.is_empty() {
+        return;
+    }
+    let total_events: usize = shown.iter().map(|&i| feed.week[i].len()).sum();
+    // One heading per shown day + all events, plus a half-line gap before each
+    // heading after the first. Solve for the px that fits the height.
+    let lines_equiv = (shown.len() + total_events) as f32 + 0.5 * (shown.len() as f32 - 1.0);
     let avail_h = (h - 2.0 * AGENDA_INSET).max(1.0);
     let px = (avail_h / (AGENDA_LINE_HEIGHT * lines_equiv))
         .floor()
@@ -468,8 +473,8 @@ fn draw_agenda(
     let bottom = y + h;
     let mut y_pos = y + AGENDA_INSET;
 
-    for slot in 0..7 {
-        if slot > 0 {
+    for (n, &slot) in shown.iter().enumerate() {
+        if n > 0 {
             y_pos += gap;
         }
         if y_pos + line_h > bottom {
@@ -873,6 +878,27 @@ mod tests {
         let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
         // Non-trivial output (the sample agenda drew some ink).
         assert!(png.len() > 1000);
+    }
+
+    #[test]
+    fn agenda_with_no_events_does_not_panic() {
+        let cfg = Config::default();
+        let fonts = Fonts::load();
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(dir.path());
+        // A feed resolved from no events → every day empty → nothing to show.
+        let mut cal = CalendarData::empty();
+        cal.feeds
+            .insert("f".to_string(), crate::calendar::resolve(&[], (2026, 6, 27)));
+        let doc = make_doc(vec![Element::Calendar(CalendarEl {
+            id: "c1".to_string(),
+            x: 10.0, y: 10.0, w: 300.0, h: 300.0,
+            colour: Colour::Black,
+            variant: CalendarVariant::Agenda,
+            feed_id: "f".to_string(),
+        })]);
+        let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
+        assert!(!png.is_empty());
     }
 
     // ── I3: No green fringe on black text ─────────────────────────────────
