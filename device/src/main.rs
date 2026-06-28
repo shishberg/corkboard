@@ -12,12 +12,34 @@ mod text;
 
 use std::sync::{Arc, Mutex};
 
+use axum::{extract::Request, middleware::Next, response::Response};
 use calendar::CalendarData;
 use display::WebPreview;
 use fonts::Fonts;
 use state::AppState;
 use storage::Storage;
 use tower_http::services::{ServeDir, ServeFile};
+
+/// Log one line per HTTP request: method, path, response status, and how long
+/// it took. Applied to the whole app so it covers the API and static files.
+async fn log_request(req: Request, next: Next) -> Response {
+    let method = req.method().clone();
+    let path = req
+        .uri()
+        .path_and_query()
+        .map(|pq| pq.as_str().to_string())
+        .unwrap_or_else(|| req.uri().path().to_string());
+    let start = std::time::Instant::now();
+    let response = next.run(req).await;
+    tracing::info!(
+        "{} {} -> {} ({} ms)",
+        method,
+        path,
+        response.status().as_u16(),
+        start.elapsed().as_millis()
+    );
+    response
+}
 
 #[tokio::main]
 async fn main() {
@@ -79,7 +101,10 @@ async fn main() {
     let serve_dir = ServeDir::new(&dist_path)
         .not_found_service(ServeFile::new(format!("{}/index.html", dist_path)));
 
-    let app = api_router.with_state(state).fallback_service(serve_dir);
+    let app = api_router
+        .with_state(state)
+        .fallback_service(serve_dir)
+        .layer(axum::middleware::from_fn(log_request));
 
     let addr = format!("0.0.0.0:{}", port);
     tracing::info!("listening on {}", addr);

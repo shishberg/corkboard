@@ -50,7 +50,10 @@ behind a `Display` trait (`WebPreview` impl serves `preview.png`; the `Panel` SP
 ONLY deferred piece — needs hardware). Resolves calendar events from a Google secret-iCal URL at
 render time, polls the feed, and re-renders only on semantic content change. **63 cargo tests.**
 - Modules (`device/src/`): `main` (bootstrap + poll task — the poll task resolves once on startup
-  then sleeps the interval, so real calendar data shows immediately, not after the first interval),
+  then sleeps the interval, so real calendar data shows immediately, not after the first interval;
+  also a `log_request` middleware logs every HTTP request as `METHOD path -> status (ms)` at INFO,
+  and storage/state log saves, image GC, feed fetches, and refreshes — secret feed URLs are never
+  logged, only feed ids/counts),
   `config`, `document` (serde mirror of
   the editor `DocState`), `storage` (files + image GC), `display` (trait + `WebPreview`), `render`
   (tiny-skia + ab_glyph; calendar/text/image/drawing → 6-colour quantise), `text`, `sample`

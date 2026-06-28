@@ -42,12 +42,14 @@ impl Storage {
         std::fs::create_dir_all(&self.root)?;
         let data = serde_json::to_string_pretty(doc)?;
         std::fs::write(self.doc_path(), data)?;
+        tracing::info!("saved document ({} page(s))", doc.pages.len());
         Ok(())
     }
 
     pub fn save_image(&self, id: &str, bytes: &[u8]) -> anyhow::Result<()> {
         std::fs::create_dir_all(self.images_dir())?;
         std::fs::write(self.image_path(id), bytes)?;
+        tracing::info!("saved image '{}' ({} bytes)", id, bytes.len());
         Ok(())
     }
 
@@ -91,13 +93,18 @@ impl Storage {
         }
 
         let stored = self.list_image_ids();
+        let mut removed = 0;
         for id in stored {
             if !referenced.contains(&id) {
                 let path = self.image_path(&id);
                 if path.exists() {
                     std::fs::remove_file(&path)?;
+                    removed += 1;
                 }
             }
+        }
+        if removed > 0 {
+            tracing::info!("garbage-collected {} unreferenced image(s)", removed);
         }
         Ok(())
     }
@@ -107,7 +114,10 @@ impl Storage {
     }
 
     pub fn save_config(&self, cfg: &Config) -> anyhow::Result<()> {
-        cfg.save(&self.config_path())
+        cfg.save(&self.config_path())?;
+        // Log only the feed count — never the secret URLs.
+        tracing::info!("saved config ({} feed(s))", cfg.feeds.len());
+        Ok(())
     }
 }
 

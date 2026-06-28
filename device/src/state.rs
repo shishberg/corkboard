@@ -98,8 +98,17 @@ impl AppState {
         let mut feeds = BTreeMap::new();
         for feed_id in &feed_ids {
             if let Some(secret_url) = feed_secrets.get(feed_id) {
+                // Never log the secret URL — only the feed id.
+                tracing::info!("fetching calendar feed '{}'", feed_id);
                 match calendar::fetch_and_resolve(secret_url, today).await {
                     Ok(resolved) => {
+                        let week_count: usize = resolved.week.iter().map(|d| d.len()).sum();
+                        tracing::info!(
+                            "calendar feed '{}' resolved: {} event(s) today, {} this week",
+                            feed_id,
+                            resolved.today.len(),
+                            week_count
+                        );
                         feeds.insert(feed_id.clone(), resolved);
                     }
                     Err(_) => {
@@ -122,6 +131,7 @@ impl AppState {
     ///
     /// Called by `POST /api/refresh` and `PUT /api/document`.
     pub async fn refresh_and_render(&self) -> anyhow::Result<()> {
+        tracing::info!("refreshing: re-resolving calendar feeds and re-rendering");
         let data = self.resolve_calendar().await;
         let sig = calendar::signature(data.today, &data.feeds);
 
