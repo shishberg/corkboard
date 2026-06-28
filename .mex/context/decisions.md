@@ -77,6 +77,7 @@ last_updated: 2026-06-28
 **Reasoning:** "Free text" was always intended (project description). It's the main reason fonts matter, so it flips the earlier "one font, no per-element choice" lean. CDN fonts don't work for a Rust renderer or an offline LAN board; one bundled source of bytes is the only way to keep editor and device text matching.
 **Alternatives considered:** Google Fonts CDN at runtime (rejected — device can't use it, breaks offline); fonts in `config.json` / drop-in fonts (deferred — more complexity than needed now); panel-only text entry (rejected — content is edited on the canvas in place).
 **Consequences:** New `TextEl` + `text` tool, `TextWidget`/`TextOptions` in the editor; the Rust renderer's text-shaping path is shared by text and calendar; `assets/fonts/` + a manifest get bundled into both the web app and the device.
+**Update (2026-06-28):** The actual bundled set is **Atkinson Hyperlegible (default), DejaVu Sans, Carlito, Gelasio** — Inter/Caveat were dropped (google/fonts only ships them variable; static TTFs needed for parity). Each family now ships **Regular (400) + Bold (700)**; the agenda's day headings use the bold face.
 
 ### Use Vue + Vite for the web UI
 **Date:** 2026-06-23
