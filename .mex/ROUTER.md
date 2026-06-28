@@ -61,7 +61,11 @@ render time, polls the feed, and re-renders only on semantic content change. **6
   `fonts` (loads `public/fonts` + embedded Atkinson fallback), `calendar` (hand-rolled ICS parse +
   resolve + semantic `signature`; `parse_ics` reads `RRULE`/`EXDATE` and `resolve` expands recurrence
   — FREQ DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL/COUNT/UNTIL/BYDAY/EXDATE, WKST ignored — so
-  recurring Google-calendar events actually appear), `api`, `state`.
+  recurring Google-calendar events actually appear. The week view is the **next 7 days starting
+  today** (slot 0 = today … slot 6 = today+6), NOT a fixed Mon–Sun ISO week — `ResolvedFeed` carries
+  `week_labels` naming each slot's weekday and `render`'s week grid uses them. Sample fallback
+  (feedless) still uses the static Mon–Sun `SAMPLE_WEEK`. The whole week view is slated for a
+  rethink), `api`, `state`.
 - Run it: `cd device && CORKBOARD_DIST=../dist CORKBOARD_FONTS=../public/fonts cargo run`
   (needs `npm run build` first so `../dist` exists). Env: `CORKBOARD_DATA` (default `./data`),
   `CORKBOARD_PORT` (8080), `CORKBOARD_DIST`, `CORKBOARD_FONTS`.

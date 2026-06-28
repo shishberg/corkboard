@@ -55,8 +55,11 @@ pub struct ResolvedEvent {
 pub struct ResolvedFeed {
     /// Events on today's date, sorted by time (all-day "" first, then HH:MM ascending).
     pub today: Vec<ResolvedEvent>,
-    /// Events grouped by ISO week day: index 0 = Monday … 6 = Sunday.
+    /// Events for the next 7 days: index 0 = today, 1 = tomorrow, … 6 = today+6.
     pub week: [Vec<ResolvedEvent>; 7],
+    /// Abbreviated weekday name for each `week` slot (e.g. "Sat","Sun","Mon"…),
+    /// since the window now floats with today rather than being a fixed Mon…Sun.
+    pub week_labels: [String; 7],
 }
 
 /// Calendar data passed to the renderer.
@@ -284,13 +287,14 @@ fn parse_weekday(token: &str) -> Option<chrono::Weekday> {
 /// today-list: events whose date == today, sorted by time (all-day "" first,
 /// then ascending by "HH:MM").
 ///
-/// week-grid: the 7-day ISO week (Mon…Sun) containing `today`, each slot
-/// carrying the events for that calendar date sorted the same way.
+/// week-grid: the next 7 days starting today (slot 0 = today … slot 6 =
+/// today+6), each slot carrying that date's events sorted the same way, plus a
+/// `week_labels` entry naming each slot's weekday.
 ///
-/// Uses `chrono::NaiveDate` for ISO week arithmetic. The function is pure and
+/// Uses `chrono::NaiveDate` for date arithmetic. The function is pure and
 /// deterministic because `today` is an explicit input — no system clock.
 pub fn resolve(events: &[VEvent], today: (i32, u32, u32)) -> ResolvedFeed {
-    use chrono::{Datelike, Days, NaiveDate};
+    use chrono::{Days, NaiveDate};
 
     let (y, m, d) = today;
     // Fallback to epoch if date is invalid (should not happen in practice).
@@ -312,18 +316,24 @@ pub fn resolve(events: &[VEvent], today: (i32, u32, u32)) -> ResolvedFeed {
         day_events
     };
 
-    // num_days_from_monday(): 0 = Monday … 6 = Sunday.
-    let days_from_monday = today_nd.weekday().num_days_from_monday() as u64;
-    let monday_nd = today_nd - Days::new(days_from_monday);
-
-    // Build the 7-slot week array (0 = Monday … 6 = Sunday).
+    // The week window is the next 7 days starting today: slot i = today + i.
     let week: [Vec<ResolvedEvent>; 7] =
-        std::array::from_fn(|i| events_on(monday_nd + Days::new(i as u64)));
+        std::array::from_fn(|i| events_on(today_nd + Days::new(i as u64)));
+    let week_labels: [String; 7] =
+        std::array::from_fn(|i| weekday_abbrev(today_nd + Days::new(i as u64)));
 
     ResolvedFeed {
         today: events_on(today_nd),
         week,
+        week_labels,
     }
+}
+
+/// Three-letter weekday abbreviation ("Mon"…"Sun") for a date.
+fn weekday_abbrev(date: chrono::NaiveDate) -> String {
+    use chrono::Datelike;
+    const NAMES: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    NAMES[date.weekday().num_days_from_monday() as usize].to_string()
 }
 
 /// Anchor a date to the Monday of its week.
@@ -614,7 +624,9 @@ mod tests {
         ]
     }
 
-    // today = Saturday 2026-06-27; ISO week is Mon 2026-06-22 … Sun 2026-06-28.
+    // today = Saturday 2026-06-27. The week window is the next 7 days:
+    // slot 0 Sat 06-27, 1 Sun 06-28, 2 Mon 06-29, 3 Tue 06-30, 4 Wed 07-01,
+    // 5 Thu 07-02, 6 Fri 07-03.
     const TODAY: (i32, u32, u32) = (2026, 6, 27);
 
     #[test]
@@ -638,34 +650,36 @@ mod tests {
     #[test]
     fn resolve_week_groups_events_into_correct_slots() {
         let feed = resolve(&fixture_events(), TODAY);
-        // ISO week: Mon=22, Tue=23, Wed=24, Thu=25, Fri=26, Sat=27, Sun=28
-        // index:     0       1       2       3       4       5       6
 
-        // Tuesday (index 1) has Soccer
-        let tue = &feed.week[1];
-        assert_eq!(tue.len(), 1);
-        assert_eq!(tue[0].title, "Soccer");
+        // Today (slot 0 = Sat 06-27) has Birthday (all-day, first) and Market.
+        let today = &feed.week[0];
+        assert_eq!(today.len(), 2);
+        assert_eq!(today[0].title, "Birthday");
+        assert_eq!(today[1].title, "Market");
 
-        // Wednesday (index 2) has Standup
-        let wed = &feed.week[2];
+        // "Next week" (07-01) is now within the next-7-days window: slot 4 (Wed).
+        let wed = &feed.week[4];
         assert_eq!(wed.len(), 1);
-        assert_eq!(wed[0].title, "Standup");
+        assert_eq!(wed[0].title, "Next week");
 
-        // Saturday (index 5) has Birthday and Market
-        let sat = &feed.week[5];
-        assert_eq!(sat.len(), 2);
-        assert_eq!(sat[0].title, "Birthday"); // all-day first
-        assert_eq!(sat[1].title, "Market");
-
-        // Sunday (index 6) has nothing in this week
-        assert!(feed.week[6].is_empty());
+        // Standup (06-24) and Soccer (06-23) are in the past — outside the window.
+        let all: Vec<&str> = feed.week.iter().flatten().map(|e| e.title.as_str()).collect();
+        assert!(!all.contains(&"Standup"));
+        assert!(!all.contains(&"Soccer"));
     }
 
     #[test]
-    fn resolve_next_week_event_not_in_week_grid() {
+    fn resolve_week_labels_name_each_days_weekday() {
         let feed = resolve(&fixture_events(), TODAY);
-        let any_next = feed.week.iter().flatten().any(|e| e.title == "Next week");
-        assert!(!any_next, "next week's event must not appear in the current week grid");
+        assert_eq!(feed.week_labels, ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"]);
+    }
+
+    #[test]
+    fn resolve_past_event_not_in_week_grid() {
+        // An event before today must not appear in the forward-looking window.
+        let feed = resolve(&fixture_events(), TODAY);
+        let any_soccer = feed.week.iter().flatten().any(|e| e.title == "Soccer");
+        assert!(!any_soccer, "a past event must not appear in the next-7-days grid");
     }
 
     #[test]
@@ -676,8 +690,9 @@ mod tests {
     }
 
     // ── recurrence (RRULE / EXDATE) ─────────────────────────────────────────────
-    // TODAY = Sat 2026-06-27; the ISO week is Mon 22 … Sun 28.
-    // Week slot indices: Mon0 Tue1 Wed2 Thu3 Fri4 Sat5 Sun6.
+    // TODAY = Sat 2026-06-27; the window is the next 7 days:
+    // slot 0 Sat 06-27, 1 Sun 06-28, 2 Mon 06-29, 3 Tue 06-30,
+    // 4 Wed 07-01, 5 Thu 07-02, 6 Fri 07-03.
 
     fn rrule(freq: Freq) -> RRule {
         RRule { freq, interval: 1, count: None, until: None, byday: vec![] }
@@ -712,28 +727,31 @@ mod tests {
 
     #[test]
     fn resolve_weekly_event_recurs_into_the_current_week() {
-        // Starts Thursday 2026-06-04, weekly → must appear on Thu 2026-06-25 (slot 3).
+        // Starts Thursday 2026-06-04, weekly → the Thursday in the window is
+        // 2026-07-02 (slot 5).
         let ev = recurring("Recorder", (2026, 6, 4), rrule(Freq::Weekly), vec![]);
         let feed = resolve(&[ev], TODAY);
-        assert_eq!(feed.week[3].len(), 1);
-        assert_eq!(feed.week[3][0].title, "Recorder");
+        assert_eq!(feed.week[5].len(), 1);
+        assert_eq!(feed.week[5][0].title, "Recorder");
     }
 
     #[test]
     fn resolve_weekly_exdate_excludes_that_occurrence() {
-        let ev = recurring("Recorder", (2026, 6, 4), rrule(Freq::Weekly), vec![(2026, 6, 25)]);
+        // Exclude the in-window Thursday (07-02).
+        let ev = recurring("Recorder", (2026, 6, 4), rrule(Freq::Weekly), vec![(2026, 7, 2)]);
         let feed = resolve(&[ev], TODAY);
-        assert!(feed.week[3].is_empty(), "the excluded Thursday must be empty");
+        assert!(feed.week[5].is_empty(), "the excluded Thursday must be empty");
     }
 
     #[test]
     fn resolve_weekly_interval_two_skips_the_off_week() {
-        // Thu 2026-06-25 is 3 weeks after the 06-04 start — odd, so INTERVAL=2 skips it.
+        // Start Thu 2026-06-11; the in-window Thursday 07-02 is 3 weeks later —
+        // odd, so INTERVAL=2 skips it.
         let mut rule = rrule(Freq::Weekly);
         rule.interval = 2;
-        let ev = recurring("Fortnightly", (2026, 6, 4), rule, vec![]);
+        let ev = recurring("Fortnightly", (2026, 6, 11), rule, vec![]);
         let feed = resolve(&[ev], TODAY);
-        assert!(feed.week[3].is_empty());
+        assert!(feed.week[5].is_empty());
     }
 
     #[test]
@@ -758,14 +776,15 @@ mod tests {
     #[test]
     fn resolve_weekly_byday_lands_on_each_listed_weekday() {
         use chrono::Weekday::*;
-        // Starts Mon 2026-06-01, BYDAY=MO,WE → Mon (slot 0) and Wed (slot 2) this week.
+        // Starts Mon 2026-06-01, BYDAY=MO,WE. In the window the Monday is 06-29
+        // (slot 2) and the Wednesday is 07-01 (slot 4).
         let mut rule = rrule(Freq::Weekly);
         rule.byday = vec![Mon, Wed];
         let ev = recurring("Class", (2026, 6, 1), rule, vec![]);
         let feed = resolve(&[ev], TODAY);
-        assert_eq!(feed.week[0].len(), 1, "Monday");
-        assert!(feed.week[1].is_empty(), "Tuesday");
-        assert_eq!(feed.week[2].len(), 1, "Wednesday");
+        assert_eq!(feed.week[2].len(), 1, "Monday 06-29");
+        assert!(feed.week[3].is_empty(), "Tuesday 06-30");
+        assert_eq!(feed.week[4].len(), 1, "Wednesday 07-01");
     }
 
     #[test]
@@ -778,31 +797,29 @@ mod tests {
     #[test]
     fn resolve_all_day_single_event_lands_on_its_weekday() {
         // "End of term 2" — all-day, single (non-recurring) on Fri 2026-07-03.
-        // today = Wed 2026-07-01 → ISO week Mon Jun 29 … Sun Jul 5; Friday is slot 4.
-        let ev = VEvent {
+        let mk = || VEvent {
             summary: "End of term 2".to_string(),
             date: (2026, 7, 3),
             time: None,
             ..Default::default()
         };
-        let feed = resolve(&[ev], (2026, 7, 1));
-        assert_eq!(feed.week[4].len(), 1, "Friday slot should hold the event");
-        assert_eq!(feed.week[4][0].title, "End of term 2");
-        assert!(feed.week[4][0].time.is_empty(), "all-day event has empty time");
-        // And it must NOT appear when today's ISO week (Jun 22 … 28) excludes Jul 3.
-        let other = resolve(&[VEvent {
-            summary: "End of term 2".to_string(),
-            date: (2026, 7, 3),
-            time: None,
-            ..Default::default()
-        }], (2026, 6, 28));
-        assert!(other.week.iter().all(|d| d.is_empty()), "not in the Jun 22–28 week");
+        // today = Wed 2026-07-01 → window 07-01… → Jul 3 is slot 2.
+        let feed = resolve(&[mk()], (2026, 7, 1));
+        assert_eq!(feed.week[2].len(), 1, "the event's day should hold it");
+        assert_eq!(feed.week[2][0].title, "End of term 2");
+        assert!(feed.week[2][0].time.is_empty(), "all-day event has empty time");
+        // The forward-looking window also surfaces it from Sun 2026-06-28
+        // (window 06-28…07-04): Jul 3 is slot 5. This is the whole point — the
+        // old ISO-week view (Jun 22…28) would have hidden it.
+        let from_sunday = resolve(&[mk()], (2026, 6, 28));
+        assert_eq!(from_sunday.week[5].len(), 1);
+        assert_eq!(from_sunday.week[5][0].title, "End of term 2");
     }
 
     #[test]
     fn resolve_monthly_event_matches_same_day_of_month() {
-        // Start 2026-05-25 monthly → recurs on the 25th → Thu 2026-06-25 (slot 3).
-        let ev = recurring("Rent", (2026, 5, 25), rrule(Freq::Monthly), vec![]);
+        // Start 2026-05-30 monthly → recurs on the 30th → Tue 2026-06-30 (slot 3).
+        let ev = recurring("Rent", (2026, 5, 30), rrule(Freq::Monthly), vec![]);
         let feed = resolve(&[ev], TODAY);
         assert_eq!(feed.week[3].len(), 1);
         assert_eq!(feed.week[3][0].title, "Rent");
@@ -828,7 +845,8 @@ mod tests {
         let mut events = fixture_events();
         let map1 = make_feed_map("f1", &events);
 
-        events[0].summary = "CHANGED TITLE".to_string();
+        // events[1] is "Market" (06-27 = today), which is inside the window.
+        events[1].summary = "CHANGED TITLE".to_string();
         let map2 = make_feed_map("f1", &events);
 
         assert_ne!(signature(TODAY, &map1), signature(TODAY, &map2));
