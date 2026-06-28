@@ -45,8 +45,9 @@ The editor's `DocState` IS the wire format. Round-two changes from the round-one
 - **Added:** `Page.background?: EpaperColour` (per-page background; absent = white). The device
   fills the surface with it before drawing elements (`#[serde(default)]`, so older docs parse).
 - **Changed:** `CalendarEl` drops the frozen `events: CalEvent[]` and instead holds
-  `feedId: string` + `variant: 'date' | 'today' | 'week'`. Events are resolved on the device
-  at render time, never stored in the document.
+  `feedId: string` + `variant: 'date' | 'today' | 'agenda'`. Events are resolved on the device
+  at render time, never stored in the document. (`agenda` was renamed from `week`; the device
+  accepts `week` as a serde alias and the editor migrates it on load, so older docs still parse.)
 
 - **Added:** `TextEl` (`type: 'text'`) — `text: string`, `font: string` (a name from the font
   manifest), `align: 'left' | 'center'`, plus the shared `colour` / `x` / `y` / `w` / `h`.
