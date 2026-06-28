@@ -58,16 +58,18 @@ async fn main() {
         let poll_state = state.clone();
         tokio::spawn(async move {
             loop {
-                let interval_secs = {
-                    let cfg = poll_state.config.lock().unwrap();
-                    cfg.poll_interval_minutes.max(1) * 60
-                };
-                tokio::time::sleep(tokio::time::Duration::from_secs(interval_secs)).await;
+                // Resolve first, then sleep — so real calendar data appears on
+                // startup instead of only after the first interval elapses.
                 match poll_state.poll_once().await {
                     Ok(true) => tracing::info!("calendar poll: content changed, display updated"),
                     Ok(false) => tracing::debug!("calendar poll: no change"),
                     Err(e) => tracing::warn!("calendar poll error: {}", e),
                 }
+                let interval_secs = {
+                    let cfg = poll_state.config.lock().unwrap();
+                    cfg.poll_interval_minutes.max(1) * 60
+                };
+                tokio::time::sleep(tokio::time::Duration::from_secs(interval_secs)).await;
             }
         });
     }

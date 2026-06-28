@@ -29,7 +29,7 @@ Then read this file fully before doing anything else in this session.
 
 ## Current Project State
 
-**Round two is COMPLETE except hardware deploy.** Both halves are built and working end-to-end: the Vue **editor** (fully round-two: clock/timeline gone; `livePageId` + make-live + `deletePage`; calendar feed-reference; text + bundled fonts; wired to the device for load/publish) AND the Rust **device server** at `device/` (storage + API + `preview.png` + real 6-colour renderer + ICS calendar resolve/poll). Element types: `calendar | image | drawing | text`. The only unbuilt piece is the `Panel` SPI driver (needs hardware). Editor: 184 Vitest + 6 Playwright parity tests. Device: 64 cargo tests. All green; `npm run build` clean.
+**Round two is COMPLETE except hardware deploy.** Both halves are built and working end-to-end: the Vue **editor** (fully round-two: clock/timeline gone; `livePageId` + make-live + `deletePage`; calendar feed-reference; text + bundled fonts; wired to the device for load/publish) AND the Rust **device server** at `device/` (storage + API + `preview.png` + real 6-colour renderer + ICS calendar resolve/poll). Element types: `calendar | image | drawing | text`. The only unbuilt piece is the `Panel` SPI driver (needs hardware). Editor: 184 Vitest + 6 Playwright parity tests. Device: 73 cargo tests. All green; `npm run build` clean.
 
 **Working — editor:**
 - Web UI editor (Vite + Vue 3 + TS + Pinia + Tailwind v4 + shadcn-vue). App shell in `src/App.vue`: TopBar, PageSidebar, ToolRail, EditorCanvas. (Timeline removed in 1a.) Hydrates its document from the device on startup; Publish does `PUT /api/document`.
@@ -49,12 +49,16 @@ whole document + images + config as plain files; serves the built editor + the J
 behind a `Display` trait (`WebPreview` impl serves `preview.png`; the `Panel` SPI driver is the
 ONLY deferred piece — needs hardware). Resolves calendar events from a Google secret-iCal URL at
 render time, polls the feed, and re-renders only on semantic content change. **63 cargo tests.**
-- Modules (`device/src/`): `main` (bootstrap + poll task), `config`, `document` (serde mirror of
+- Modules (`device/src/`): `main` (bootstrap + poll task — the poll task resolves once on startup
+  then sleeps the interval, so real calendar data shows immediately, not after the first interval),
+  `config`, `document` (serde mirror of
   the editor `DocState`), `storage` (files + image GC), `display` (trait + `WebPreview`), `render`
   (tiny-skia + ab_glyph; calendar/text/image/drawing → 6-colour quantise), `text`, `sample`
   (deterministic calendar data, ported from `src/lib/sampleCalendar.ts` — keep the two in sync),
   `fonts` (loads `public/fonts` + embedded Atkinson fallback), `calendar` (hand-rolled ICS parse +
-  resolve + semantic `signature`), `api`, `state`.
+  resolve + semantic `signature`; `parse_ics` reads `RRULE`/`EXDATE` and `resolve` expands recurrence
+  — FREQ DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL/COUNT/UNTIL/BYDAY/EXDATE, WKST ignored — so
+  recurring Google-calendar events actually appear), `api`, `state`.
 - Run it: `cd device && CORKBOARD_DIST=../dist CORKBOARD_FONTS=../public/fonts cargo run`
   (needs `npm run build` first so `../dist` exists). Env: `CORKBOARD_DATA` (default `./data`),
   `CORKBOARD_PORT` (8080), `CORKBOARD_DIST`, `CORKBOARD_FONTS`.
