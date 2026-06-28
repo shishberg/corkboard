@@ -9,6 +9,8 @@ static EMBEDDED: &[u8] =
 /// FreeType faces are `!Send`/`!Sync` and `Fonts` lives in shared state.
 pub struct Fonts {
     fonts: HashMap<String, Vec<u8>>,
+    /// Bold (weight 700) face bytes, for the fonts whose manifest declares one.
+    bold: HashMap<String, Vec<u8>>,
     default_id: String,
 }
 
@@ -29,6 +31,11 @@ impl Fonts {
         self.fonts.iter()
     }
 
+    /// All (id, bold bytes) pairs for fonts that ship a bold face.
+    pub fn bold_entries(&self) -> impl Iterator<Item = (&String, &Vec<u8>)> {
+        self.bold.iter()
+    }
+
     // ------------------------------------------------------------------ //
 
     fn embedded_only() -> Self {
@@ -36,6 +43,7 @@ impl Fonts {
         fonts.insert("atkinson-hyperlegible".to_string(), EMBEDDED.to_vec());
         Fonts {
             fonts,
+            bold: HashMap::new(),
             default_id: "atkinson-hyperlegible".to_string(),
         }
     }
@@ -49,6 +57,7 @@ impl Fonts {
         let manifest: Manifest = serde_json::from_str(&manifest_text)?;
 
         let mut font_map: HashMap<String, Vec<u8>> = HashMap::new();
+        let mut bold_map: HashMap<String, Vec<u8>> = HashMap::new();
         let mut default_id = "atkinson-hyperlegible".to_string();
 
         for entry in &manifest.fonts {
@@ -65,12 +74,23 @@ impl Fonts {
                 let bytes = std::fs::read(fonts_dir.join(&face.file))?;
                 font_map.insert(entry.id.clone(), bytes);
             }
+
+            // Optional bold face (weight 700, normal) for bold headings.
+            if let Some(bold) = entry
+                .faces
+                .iter()
+                .find(|f| f.weight == 700 && f.style == "normal")
+            {
+                let bytes = std::fs::read(fonts_dir.join(&bold.file))?;
+                bold_map.insert(entry.id.clone(), bytes);
+            }
         }
 
         anyhow::ensure!(!font_map.is_empty(), "no fonts found in manifest");
 
         Ok(Fonts {
             fonts: font_map,
+            bold: bold_map,
             default_id,
         })
     }

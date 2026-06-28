@@ -104,53 +104,10 @@ pub fn render(
                             );
                         }
 
-                        CalendarVariant::Today => {
-                            // "Today" heading + event list.
-                            // Build event lines from the resolved feed or fall back to sample.
-                            let event_lines: Vec<String> = {
-                                let mut lines = vec!["Today".to_string()];
-                                if let Some(feed) = cal.for_feed(&el.feed_id) {
-                                    for ev in &feed.today {
-                                        if ev.time.is_empty() {
-                                            lines.push(format!("  {}", ev.title));
-                                        } else {
-                                            lines.push(format!("{}  {}", ev.time, ev.title));
-                                        }
-                                    }
-                                } else {
-                                    for (time, title) in sample::SAMPLE_TODAY_EVENTS {
-                                        lines.push(format!("{}  {}", time, title));
-                                    }
-                                }
-                                lines
-                            };
-
-                            // Floor at 11px: even hinted, 1-bit text below ~10px
-                            // has too few pixels to read on the panel.
-                            let small_px = (el.w.min(el.h) * 0.09).clamp(11.0, 32.0);
-                            let small_line_h = small_px * 1.25;
-                            let mut y_pos = el.y;
-
-                            for line in &event_lines {
-                                if y_pos + small_line_h > el.y + el.h {
-                                    break;
-                                }
-                                text::draw_text(
-                                    &mut pixmap,
-                                    font,
-                                    line,
-                                    el.x, y_pos, el.w, small_line_h,
-                                    small_px,
-                                    text::Align::Left,
-                                    colour,
-                                );
-                                y_pos += small_line_h;
-                            }
-                        }
-
                         CalendarVariant::Agenda => {
-                            // 7-day agenda: a day heading (Today, Tomorrow, then
-                            // weekday names) with that day's events beneath it.
+                            // Agenda: a bold day heading (Today, Tomorrow, then
+                            // weekday names) with that day's events indented
+                            // beneath it and a thin divider under each event.
                             // Uses the resolved feed, or the sample feed when no
                             // feed is configured. The editor mirrors this layout.
                             let sample_owned;
@@ -163,10 +120,12 @@ pub fn render(
                             };
                             draw_agenda(
                                 &mut pixmap,
-                                font,
+                                &faces,
+                                &el.font,
                                 feed,
                                 el.x, el.y, el.w, el.h,
                                 colour,
+                                el.days_ahead,
                             );
                         }
                     }
@@ -454,24 +413,33 @@ fn agenda_event_line(time: &str, title: &str) -> String {
 /// Render the 7-day agenda for `feed` into the box (x, y, w, h). A single font
 /// size is chosen so all day headings and events fit the height; overflow is
 /// clipped. Each line is drawn single-line (clipped to width, no wrap).
+#[allow(clippy::too_many_arguments)]
 fn draw_agenda(
     pixmap: &mut tiny_skia::Pixmap,
-    font: &text::Face,
+    faces: &text::Faces,
+    font_id: &str,
     feed: &ResolvedFeed,
     x: f32,
     y: f32,
     w: f32,
     h: f32,
     colour: [u8; 3],
+    days_ahead: u32,
 ) {
-    // Only days that have events are shown — empty days are skipped entirely.
-    let shown: Vec<usize> = (0..7).filter(|&i| !feed.week[i].is_empty()).collect();
+    let regular = faces.get(font_id);
+    let heading_face = faces.heading(font_id);
+
+    // Look ahead the requested number of days (1..=7), then show only the days
+    // in that window that have events — empty days are skipped entirely.
+    let horizon = days_ahead.clamp(1, 7) as usize;
+    let shown: Vec<usize> = (0..horizon).filter(|&i| !feed.week[i].is_empty()).collect();
     if shown.is_empty() {
         return;
     }
     let total_events: usize = shown.iter().map(|&i| feed.week[i].len()).sum();
     // One heading per shown day + all events, plus a half-line gap before each
-    // heading after the first. Solve for the px that fits the height.
+    // heading after the first. Solve for the px that fits the height; when even
+    // the minimum px overflows, the layout below truncates at a line boundary.
     let lines_equiv = (shown.len() + total_events) as f32 + 0.5 * (shown.len() as f32 - 1.0);
     let avail_h = (h - 2.0 * AGENDA_INSET).max(1.0);
     let px = (avail_h / (AGENDA_LINE_HEIGHT * lines_equiv))
@@ -483,7 +451,7 @@ fn draw_agenda(
 
     let x0 = x + AGENDA_INSET;
     let inner_w = w - 2.0 * AGENDA_INSET;
-    let bottom = y + h;
+    let bottom = y + h - AGENDA_INSET;
     let mut y_pos = y + AGENDA_INSET;
 
     for (n, &slot) in shown.iter().enumerate() {
@@ -495,7 +463,7 @@ fn draw_agenda(
         }
         let heading = agenda_heading(slot, &feed.week_labels[slot]);
         text::draw_text(
-            pixmap, font, &heading,
+            pixmap, heading_face, &heading,
             x0, y_pos, inner_w, line_h,
             px, text::Align::Left, colour,
         );
@@ -507,10 +475,13 @@ fn draw_agenda(
             }
             let line = agenda_event_line(&ev.time, &ev.title);
             text::draw_text(
-                pixmap, font, &line,
+                pixmap, regular, &line,
                 x0 + indent, y_pos, inner_w - indent, line_h,
                 px, text::Align::Left, colour,
             );
+            // Thin divider under the event, in the text colour.
+            let divider_y = (y_pos + line_h - 1.0).round();
+            fill_rect(pixmap, x0 + indent, divider_y, inner_w - indent, 1.0, colour);
             y_pos += line_h;
         }
     }
@@ -847,17 +818,15 @@ mod tests {
                 feed_id: String::new(),
                 font: String::new(),
                 align: TextAlign::Center,
+                days_ahead: 7,
             })]);
             render(&doc, &cfg, &fonts, &storage, &cal).unwrap()
         };
 
         let date_png = render_variant(CalendarVariant::Date);
-        let today_png = render_variant(CalendarVariant::Today);
         let agenda_png = render_variant(CalendarVariant::Agenda);
 
-        assert_ne!(date_png, today_png, "date and today variants must differ");
         assert_ne!(date_png, agenda_png, "date and agenda variants must differ");
-        assert_ne!(today_png, agenda_png, "today and agenda variants must differ");
     }
 
     /// A calendar's font changes its rendered text — two different fonts on the
@@ -879,6 +848,7 @@ mod tests {
                 feed_id: String::new(),
                 font: font.to_string(),
                 align: TextAlign::Center,
+                days_ahead: 7,
             })]);
             render(&doc, &cfg, &fonts, &storage, &cal).unwrap()
         };
@@ -921,6 +891,7 @@ mod tests {
             feed_id: String::new(),
             font: String::new(),
             align: TextAlign::Center,
+            days_ahead: 7,
         })]);
         let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
         // Non-trivial output (the sample agenda drew some ink).
@@ -945,6 +916,7 @@ mod tests {
             feed_id: "f".to_string(),
             font: String::new(),
             align: TextAlign::Center,
+            days_ahead: 7,
         })]);
         let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
         assert!(!png.is_empty());
@@ -1016,7 +988,7 @@ mod tests {
 
     // ── S3: Sample fallback ───────────────────────────────────────────────
 
-    /// With CalendarData::empty() (no resolved feeds), a Today calendar element
+    /// With CalendarData::empty() (no resolved feeds), an agenda calendar element
     /// must render using sample data and produce a non-empty PNG — the S4 parity
     /// baseline depends on this fallback being active.
     #[test]
@@ -1025,10 +997,11 @@ mod tests {
             id: "c1".to_string(),
             x: 10.0, y: 10.0, w: 420.0, h: 300.0,
             colour: Colour::Black,
-            variant: CalendarVariant::Today,
+            variant: CalendarVariant::Agenda,
             feed_id: String::new(),
             font: String::new(),
             align: TextAlign::Center,
+            days_ahead: 7,
         })]);
         let cfg = Config::default();
         let fonts = Fonts::load();

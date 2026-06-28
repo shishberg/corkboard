@@ -32,6 +32,8 @@ pub const LINE_HEIGHT: f32 = 1.25;
 /// faces with no lifetime tie back to the `Library`.
 pub struct Faces {
     faces: HashMap<String, Face>,
+    /// Bold (weight 700) faces, for the fonts that ship one.
+    bold_faces: HashMap<String, Face>,
     default_id: String,
 }
 
@@ -46,6 +48,12 @@ impl Faces {
                 faces.insert(id.clone(), face);
             }
         }
+        let mut bold_faces = HashMap::new();
+        for (id, bytes) in fonts.bold_entries() {
+            if let Ok(face) = lib.new_memory_face(bytes.clone(), 0) {
+                bold_faces.insert(id.clone(), face);
+            }
+        }
         let default_id = if faces.contains_key(fonts.default_id()) {
             fonts.default_id().to_string()
         } else {
@@ -55,7 +63,7 @@ impl Faces {
                 .cloned()
                 .expect("at least one font must load")
         };
-        Faces { faces, default_id }
+        Faces { faces, bold_faces, default_id }
     }
 
     /// Face for `id`, falling back to the default, then any loaded face.
@@ -65,6 +73,12 @@ impl Faces {
             .or_else(|| self.faces.get(&self.default_id))
             .or_else(|| self.faces.values().next())
             .expect("faces map is never empty")
+    }
+
+    /// Bold face for `id` if the font ships one, else its regular face. Used for
+    /// headings so they render bold wherever a real bold face is available.
+    pub fn heading(&self, id: &str) -> &Face {
+        self.bold_faces.get(id).unwrap_or_else(|| self.get(id))
     }
 
     /// The default face. Only tests need this directly — render paths resolve a

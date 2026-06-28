@@ -10,9 +10,10 @@ beforeEach(() => {
 describe('useToolOptionsStore', () => {
   it('has sensible defaults', () => {
     const s = useToolOptionsStore()
-    expect(s.calendarVariant).toBe('today')
+    expect(s.calendarVariant).toBe('agenda')
     expect(s.colour).toBe('black')
     expect(s.penSize).toBe(4)
+    expect(s.daysAhead).toBe(7)
   })
 
   it('persists changes to localStorage', () => {

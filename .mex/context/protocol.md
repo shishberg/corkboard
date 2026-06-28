@@ -45,9 +45,12 @@ The editor's `DocState` IS the wire format. Round-two changes from the round-one
 - **Added:** `Page.background?: EpaperColour` (per-page background; absent = white). The device
   fills the surface with it before drawing elements (`#[serde(default)]`, so older docs parse).
 - **Changed:** `CalendarEl` drops the frozen `events: CalEvent[]` and instead holds
-  `feedId: string` + `variant: 'date' | 'today' | 'agenda'`. Events are resolved on the device
-  at render time, never stored in the document. (`agenda` was renamed from `week`; the device
-  accepts `week` as a serde alias and the editor migrates it on load, so older docs still parse.)
+  `feedId: string` + `variant: 'date' | 'agenda'` + `font: string` + `align: 'left' | 'center'`
+  + `daysAhead: number` (agenda horizon, 1..=7, default 7). Events are resolved on the device
+  at render time, never stored in the document. (`agenda` was renamed from `week`, and the old
+  single-day `today` variant was folded into `agenda`; the device accepts both `week` and `today`
+  as serde aliases and the editor migrates them on load, so older docs still parse. `align` and
+  `daysAhead` are `#[serde(default)]` — missing `align` defaults to centre, `daysAhead` to 7.)
 
 - **Added:** `TextEl` (`type: 'text'`) — `text: string`, `font: string` (a name from the font
   manifest), `align: 'left' | 'center'`, plus the shared `colour` / `x` / `y` / `w` / `h`.
@@ -56,8 +59,9 @@ Element types are a discriminated union on `type`: `calendar | text | image | dr
 
 Fonts: text is shaped from bundled font files (default Atkinson Hyperlegible), served by the
 device to the editor as `@font-face` and loaded directly by the Rust renderer. The available
-set is a bundled **font manifest** (name → file), shared by both — NOT in `config.json`.
-`TextEl.font` picks from that set. See the spec's Fonts section.
+set is a bundled **font manifest** (name → file), shared by both — NOT in `config.json`. Each
+font ships a **regular (400) and bold (700)** face; the agenda's day headings render in the bold
+face on both sides. `TextEl.font` / `CalendarEl.font` pick from that set. See the spec's Fonts section.
 
 ## Images
 Uploaded separately (`POST /api/images`), referenced from the document by id (`ImageEl.src`

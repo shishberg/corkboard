@@ -171,6 +171,13 @@ export const usePagesStore = defineStore('pages', {
       if (!el || el.type !== 'calendar') return
       ;(el as CalendarEl).feedId = feedId
     },
+    setElementDaysAhead(id: string, daysAhead: number) {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      const el = page?.elements.find((e) => e.id === id)
+      if (!el || el.type !== 'calendar') return
+      // Show at least one day, capped at the resolved week window.
+      ;(el as CalendarEl).daysAhead = Math.max(1, Math.min(7, Math.round(daysAhead)))
+    },
     setElementAlign(id: string, align: 'left' | 'center') {
       const page = this.pages.find((p) => p.id === this.selectedPageId)
       const el = page?.elements.find((e) => e.id === id)
@@ -187,17 +194,19 @@ export const usePagesStore = defineStore('pages', {
         ...p,
         background: p.background ?? 'white',
         orientation: p.orientation ?? legacyOrientation,
-        // Normalise legacy calendars: migrate the 'week' variant to 'agenda'
-        // and default a missing align to 'center' (the old fixed date layout).
-        elements: p.elements.map((el) =>
-          el.type === 'calendar'
-            ? {
-                ...el,
-                variant: ((el.variant as string) === 'week' ? 'agenda' : el.variant) as CalendarEl['variant'],
-                align: (el as CalendarEl).align ?? 'center',
-              }
-            : el,
-        ),
+        // Normalise legacy calendars: migrate the 'week' and now-removed 'today'
+        // variants to 'agenda', default a missing align to 'center' (the old
+        // fixed date layout), and default daysAhead to a full week.
+        elements: p.elements.map((el) => {
+          if (el.type !== 'calendar') return el
+          const v = el.variant as string
+          return {
+            ...el,
+            variant: (v === 'week' || v === 'today' ? 'agenda' : el.variant) as CalendarEl['variant'],
+            align: (el as CalendarEl).align ?? 'center',
+            daysAhead: (el as CalendarEl).daysAhead ?? 7,
+          }
+        }),
       }))
       this.activeTool = doc.activeTool
       this.selectedElId = doc.selectedElId

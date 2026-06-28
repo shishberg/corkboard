@@ -33,13 +33,6 @@ pub fn format_sample_date(date: &str) -> String {
 
 pub const SAMPLE_TODAY: &str = "2026-06-27";
 
-/// (time, title) pairs for the sample day.
-pub const SAMPLE_TODAY_EVENTS: &[(&str, &str)] = &[
-    ("09:00", "Standup"),
-    ("12:30", "Lunch"),
-    ("15:00", "School pickup"),
-];
-
 /// Sample events for the agenda view, used when no calendar feed is configured.
 /// Anchored to SAMPLE_TODAY (2026-06-27, a Saturday) and mirrored exactly by
 /// sampleCalendar.ts in the editor so the preview matches the panel.

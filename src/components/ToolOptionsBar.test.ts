@@ -8,7 +8,7 @@ import * as fontsLib from '@/lib/fonts'
 import type { ToolId } from '@/stores/types'
 
 function calendarEl(id: string) {
-  return { id, type: 'calendar' as const, variant: 'today' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible', align: 'center' as const }
+  return { id, type: 'calendar' as const, variant: 'agenda' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible', align: 'center' as const, daysAhead: 7 as const }
 }
 function textEl(id: string) {
   return { id, type: 'text' as const, x: 0, y: 0, w: 240, h: 80, colour: 'black' as const, text: 'Text', font: 'atkinson-hyperlegible', align: 'left' as const }

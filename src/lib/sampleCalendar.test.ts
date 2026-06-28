@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatSampleDate, SAMPLE_TODAY, SAMPLE_TODAY_EVENTS, SAMPLE_WEEK } from './sampleCalendar'
+import { formatSampleDate, SAMPLE_TODAY, SAMPLE_WEEK } from './sampleCalendar'
 
 describe('formatSampleDate', () => {
   it('formats SAMPLE_TODAY as Saturday 27 June', () => {
@@ -16,10 +16,6 @@ describe('formatSampleDate', () => {
 })
 
 describe('sample data shapes', () => {
-  it('SAMPLE_TODAY_EVENTS has 3 entries', () => {
-    expect(SAMPLE_TODAY_EVENTS).toHaveLength(3)
-  })
-
   it('SAMPLE_WEEK has 7 entries', () => {
     expect(SAMPLE_WEEK).toHaveLength(7)
   })

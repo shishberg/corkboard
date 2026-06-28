@@ -35,6 +35,7 @@ export async function addImageFromFile(file: File): Promise<string | null> {
       feedId: opts.feedId,
       font: opts.font,
       align: opts.align,
+      daysAhead: opts.daysAhead,
       imageId: id,
     },
     store.pageSize,

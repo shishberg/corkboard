@@ -29,6 +29,8 @@ Then read this file fully before doing anything else in this session.
 
 ## Current Project State
 
+**Calendar variants are now `date | agenda` only** (the single-day `today` variant was removed and folded into `agenda`; both `today` and `week` remain serde/load aliases → `agenda`). `CalendarEl` carries `align: 'left'|'center'` (the text alignment tool now applies to calendars too) and `daysAhead: number` (agenda horizon 1..=7, default 7, set via a number input in `CalendarOptions`). The **Date** variant auto-fits its font to fill the box like a text field (`textFit`/`fit_font_size`), top-aligned with `align` horizontally. The **Agenda** variant draws **bold day headings** (using each font's real 700 face — all four bundled fonts now ship a Bold.ttf), indented events, and a 1px divider (text colour) under each event; it fits a font size then truncates at a line boundary when content overflows. Editor `CalendarWidget` and device `draw_agenda` share the exact layout algorithm (WYSIWYG; parity test green).
+
 **Round two is COMPLETE except hardware deploy.** Both halves are built and working end-to-end: the Vue **editor** (fully round-two: clock/timeline gone; `livePageId` + make-live + `deletePage`; calendar feed-reference; text + bundled fonts; wired to the device for load/publish) AND the Rust **device server** at `device/` (storage + API + `preview.png` + real 6-colour renderer + ICS calendar resolve/poll). Element types: `calendar | image | drawing | text`. The only unbuilt piece is the `Panel` SPI driver (needs hardware). Editor: 216 Vitest + 6 Playwright parity tests. Device: 92 cargo tests. All green; `npm run build` clean.
 
 **Working — editor:**

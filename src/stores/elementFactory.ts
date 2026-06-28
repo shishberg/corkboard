@@ -4,11 +4,12 @@ let counter = 0
 const uid = () => `el-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
 interface FactoryOpts {
-  calendarVariant: 'date' | 'today' | 'agenda'
+  calendarVariant: 'date' | 'agenda'
   colour: EpaperColour
   feedId: string
   font: string
   align: 'left' | 'center'
+  daysAhead: number
   imageId?: string
 }
 
@@ -56,7 +57,7 @@ export function makeElement(
   const base = { id: uid(), ...geom, colour: opts.colour }
   switch (tool) {
     case 'calendar':
-      return { ...base, type: 'calendar', variant: opts.calendarVariant, feedId: opts.feedId, font: opts.font, align: opts.align }
+      return { ...base, type: 'calendar', variant: opts.calendarVariant, feedId: opts.feedId, font: opts.font, align: opts.align, daysAhead: opts.daysAhead }
     case 'image':
       return { ...base, type: 'image', src: opts.imageId ?? '' }
     case 'text':

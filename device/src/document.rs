@@ -53,16 +53,16 @@ pub struct Stroke {
 #[serde(rename_all = "lowercase")]
 pub enum CalendarVariant {
     Date,
-    Today,
-    /// 7-day agenda list (Today, Tomorrow, then weekday names). `week` is the
-    /// old wire name, kept as an alias so older saved documents still load.
-    #[serde(alias = "week")]
+    /// Agenda list (Today, Tomorrow, then weekday names). `week` is the old wire
+    /// name and `today` is the now-removed single-day variant; both are kept as
+    /// aliases so older saved documents still load (folding into the agenda).
+    #[serde(alias = "week", alias = "today")]
     Agenda,
 }
 
 impl Default for CalendarVariant {
     fn default() -> Self {
-        CalendarVariant::Today
+        CalendarVariant::Agenda
     }
 }
 
@@ -86,6 +86,12 @@ fn center_align() -> TextAlign {
     TextAlign::Center
 }
 
+/// Default agenda horizon (days to look ahead) for calendars that predate the
+/// `daysAhead` field. A full week matches the resolved feed window.
+fn default_days_ahead() -> u32 {
+    7
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarEl {
@@ -106,6 +112,9 @@ pub struct CalendarEl {
     /// centre, matching the old fixed date layout.
     #[serde(default = "center_align")]
     pub align: TextAlign,
+    /// Agenda horizon: how many days ahead to show (1..=7). Clamped at render.
+    #[serde(default = "default_days_ahead")]
+    pub days_ahead: u32,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -414,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn calendar_variant_defaults_to_today() {
+    fn calendar_variant_defaults_to_agenda() {
         let json = r#"{
             "type": "calendar",
             "id": "c1",
@@ -423,7 +432,27 @@ mod tests {
         }"#;
         let el: Element = serde_json::from_str(json).unwrap();
         if let Element::Calendar(c) = el {
-            assert!(matches!(c.variant, CalendarVariant::Today));
+            assert!(matches!(c.variant, CalendarVariant::Agenda));
+            // Missing daysAhead defaults to a full week.
+            assert_eq!(c.days_ahead, 7);
+        } else {
+            panic!("expected Calendar element");
+        }
+    }
+
+    #[test]
+    fn calendar_variant_today_alias_maps_to_agenda() {
+        // The 'today' single-day variant was removed; old docs fold into agenda.
+        let json = r#"{
+            "type": "calendar",
+            "id": "c1",
+            "x": 0.0, "y": 0.0, "w": 200.0, "h": 150.0,
+            "colour": "black",
+            "variant": "today"
+        }"#;
+        let el: Element = serde_json::from_str(json).unwrap();
+        if let Element::Calendar(c) = el {
+            assert!(matches!(c.variant, CalendarVariant::Agenda));
         } else {
             panic!("expected Calendar element");
         }

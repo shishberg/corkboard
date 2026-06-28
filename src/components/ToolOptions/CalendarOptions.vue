@@ -11,7 +11,6 @@ const store = usePagesStore()
 
 const variants = [
   { id: 'date', label: 'Date' },
-  { id: 'today', label: 'Today' },
   { id: 'agenda', label: 'Agenda' },
 ] as const
 
@@ -28,6 +27,9 @@ const selectedCalEl = computed((): CalendarEl | null => {
 // defaults used for new calendars.
 const variantValue = computed(() => selectedCalEl.value?.variant ?? opts.calendarVariant)
 const feedValue = computed(() => selectedCalEl.value?.feedId ?? opts.feedId)
+const daysAheadValue = computed(() => selectedCalEl.value?.daysAhead ?? opts.daysAhead)
+// The days-ahead control only applies to the agenda layout.
+const showDaysAhead = computed(() => variantValue.value === 'agenda')
 
 function pickVariant(variant: CalendarEl['variant']) {
   opts.calendarVariant = variant
@@ -40,6 +42,14 @@ function pickFeed(feedId: string) {
   opts.feedId = feedId
   if (selectedCalEl.value) {
     store.setElementFeed(selectedCalEl.value.id, feedId)
+  }
+}
+
+function pickDaysAhead(value: string) {
+  const days = Math.max(1, Math.min(7, Math.round(Number(value) || 0)))
+  opts.daysAhead = days
+  if (selectedCalEl.value) {
+    store.setElementDaysAhead(selectedCalEl.value.id, days)
   }
 }
 
@@ -82,5 +92,17 @@ onMounted(() => {
       <option v-if="!hasFeeds" value="">(none)</option>
       <option v-for="feed in feeds.feeds" :key="feed.id" :value="feed.id">{{ feed.name }}</option>
     </select>
+    <label v-if="showDaysAhead" class="ml-1 flex items-center gap-1 text-sm text-neutral-600">
+      Days
+      <input
+        data-role="days-ahead"
+        type="number"
+        min="1"
+        max="7"
+        class="w-12 rounded border px-1 py-1 text-sm"
+        :value="daysAheadValue"
+        @change="pickDaysAhead(($event.target as HTMLInputElement).value)"
+      />
+    </label>
   </div>
 </template>

@@ -14,17 +14,26 @@ export const DEFAULT_MANIFEST: FontDef[] = [
   {
     id: 'dejavu-sans',
     name: 'DejaVu Sans',
-    faces: [{ weight: 400, style: 'normal', file: 'dejavu-sans/DejaVuSans.ttf' }],
+    faces: [
+      { weight: 400, style: 'normal', file: 'dejavu-sans/DejaVuSans.ttf' },
+      { weight: 700, style: 'normal', file: 'dejavu-sans/DejaVuSans-Bold.ttf' },
+    ],
   },
   {
     id: 'carlito',
     name: 'Carlito',
-    faces: [{ weight: 400, style: 'normal', file: 'carlito/Carlito-Regular.ttf' }],
+    faces: [
+      { weight: 400, style: 'normal', file: 'carlito/Carlito-Regular.ttf' },
+      { weight: 700, style: 'normal', file: 'carlito/Carlito-Bold.ttf' },
+    ],
   },
   {
     id: 'gelasio',
     name: 'Gelasio',
-    faces: [{ weight: 400, style: 'normal', file: 'gelasio/Gelasio.ttf' }],
+    faces: [
+      { weight: 400, style: 'normal', file: 'gelasio/Gelasio.ttf' },
+      { weight: 700, style: 'normal', file: 'gelasio/Gelasio-Bold.ttf' },
+    ],
   },
 ]
 

@@ -2,12 +2,6 @@ export const SAMPLE_TODAY = '2026-06-27' // fixed ISO date so editor + device ag
 
 export interface SampleEvent { time: string; title: string }
 
-export const SAMPLE_TODAY_EVENTS: SampleEvent[] = [
-  { time: '09:00', title: 'Standup' },
-  { time: '12:30', title: 'Lunch' },
-  { time: '15:00', title: 'School pickup' },
-]
-
 export interface SampleDay { day: string; events: SampleEvent[] }
 
 export const SAMPLE_WEEK: SampleDay[] = [
