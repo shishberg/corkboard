@@ -776,6 +776,30 @@ mod tests {
     }
 
     #[test]
+    fn resolve_all_day_single_event_lands_on_its_weekday() {
+        // "End of term 2" — all-day, single (non-recurring) on Fri 2026-07-03.
+        // today = Wed 2026-07-01 → ISO week Mon Jun 29 … Sun Jul 5; Friday is slot 4.
+        let ev = VEvent {
+            summary: "End of term 2".to_string(),
+            date: (2026, 7, 3),
+            time: None,
+            ..Default::default()
+        };
+        let feed = resolve(&[ev], (2026, 7, 1));
+        assert_eq!(feed.week[4].len(), 1, "Friday slot should hold the event");
+        assert_eq!(feed.week[4][0].title, "End of term 2");
+        assert!(feed.week[4][0].time.is_empty(), "all-day event has empty time");
+        // And it must NOT appear when today's ISO week (Jun 22 … 28) excludes Jul 3.
+        let other = resolve(&[VEvent {
+            summary: "End of term 2".to_string(),
+            date: (2026, 7, 3),
+            time: None,
+            ..Default::default()
+        }], (2026, 6, 28));
+        assert!(other.week.iter().all(|d| d.is_empty()), "not in the Jun 22–28 week");
+    }
+
+    #[test]
     fn resolve_monthly_event_matches_same_day_of_month() {
         // Start 2026-05-25 monthly → recurs on the 25th → Thu 2026-06-25 (slot 3).
         let ev = recurring("Rent", (2026, 5, 25), rrule(Freq::Monthly), vec![]);
