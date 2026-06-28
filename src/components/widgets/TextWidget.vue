@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import type { TextEl } from '@/stores/types'
 import { usePagesStore } from '@/stores/pages'
 
-const props = defineProps<{ el: TextEl }>()
+const props = withDefaults(defineProps<{ el: TextEl; editing?: boolean }>(), {
+  editing: false,
+})
+
+const emit = defineEmits<{ stopEditing: [] }>()
 
 const store = usePagesStore()
 const editRef = ref<HTMLElement | null>(null)
 
 // Mirror CalendarWidget's baseSize: scale font with the smaller dimension
 const baseSize = computed(() => `${Math.max(8, Math.min(props.el.w, props.el.h) * 0.25)}px`)
-
-const isEditable = computed(
-  () => store.selectedElId === props.el.id && store.activeTool === 'select',
-)
 
 onMounted(() => {
   if (editRef.value) {
@@ -33,12 +33,31 @@ watch(
   },
 )
 
+// When edit mode turns on, focus the box and drop the caret at the end so the
+// user can type immediately (the contenteditable only became focusable now).
+watch(
+  () => props.editing,
+  async (on) => {
+    if (!on) return
+    await nextTick()
+    const node = editRef.value
+    if (!node) return
+    node.focus()
+    const range = document.createRange()
+    range.selectNodeContents(node)
+    range.collapse(false)
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+  },
+)
+
 function onInput(e: Event) {
   store.setElementText(props.el.id, (e.target as HTMLElement).innerText)
 }
 
-function onFocus() {
-  store.selectElement(props.el.id)
+function onBlur() {
+  emit('stopEditing')
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -66,11 +85,11 @@ function onKeydown(e: KeyboardEvent) {
         color: el.colour,
         whiteSpace: 'pre-wrap',
         outline: 'none',
-        cursor: isEditable ? 'text' : 'default',
+        cursor: editing ? 'text' : 'default',
       }"
-      :contenteditable="isEditable ? 'true' : 'false'"
+      :contenteditable="editing ? 'true' : 'false'"
       @input="onInput"
-      @focus="onFocus"
+      @blur="onBlur"
       @keydown="onKeydown"
     ></div>
   </div>

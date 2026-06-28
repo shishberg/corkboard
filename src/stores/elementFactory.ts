@@ -9,6 +9,7 @@ interface FactoryOpts {
   feedId: string
   font: string
   align: 'left' | 'center'
+  imageId?: string
 }
 
 interface Rect {
@@ -41,7 +42,7 @@ export function makeElement(
     case 'calendar':
       return { ...base, type: 'calendar', variant: opts.calendarVariant, feedId: opts.feedId }
     case 'image':
-      return { ...base, type: 'image', src: '' }
+      return { ...base, type: 'image', src: opts.imageId ?? '' }
     case 'text':
       return { ...base, type: 'text', text: 'Text', font: opts.font, align: opts.align } satisfies TextEl
   }

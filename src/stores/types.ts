@@ -1,5 +1,5 @@
 export type Orientation = 'landscape' | 'portrait'
-export type ToolId = 'select' | 'calendar' | 'draw' | 'image' | 'text'
+export type ToolId = 'select' | 'calendar' | 'draw' | 'image' | 'text' | 'background'
 export type EpaperColour = 'black' | 'white' | 'red' | 'yellow' | 'blue' | 'green'
 
 export interface BaseEl { id: string; type: string; x: number; y: number; w: number; h: number; colour: EpaperColour }
@@ -12,7 +12,7 @@ export interface Stroke { colour: EpaperColour; size: number; points: { x: numbe
 
 export type El = CalendarEl | ImageEl | DrawingEl | TextEl
 
-export interface Page { id: string; name: string; elements: El[] }
+export interface Page { id: string; name: string; elements: El[]; background?: EpaperColour }
 
 export interface DocState {
   orientation: Orientation

@@ -19,7 +19,6 @@ onMounted(() => {
 
 <template>
   <div class="flex flex-col gap-1">
-    <p class="mb-1 text-xs font-medium text-neutral-500">Calendar view</p>
     <button
       v-for="v in variants"
       :key="v.id"

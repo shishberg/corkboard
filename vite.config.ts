@@ -10,4 +10,15 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   server: { allowedHosts: ["kodama.local"] },
+  build: {
+    rollupOptions: {
+      // Silence Rolldown's INVALID_ANNOTATION noise from @vueuse/core's prebuilt
+      // bundle (misplaced `/* #__PURE__ */` comments — a third-party artifact,
+      // nothing in our code). Let every other warning through.
+      onLog(level, log, handler) {
+        if (log.code === 'INVALID_ANNOTATION' && log.message?.includes('@vueuse/core')) return
+        handler(level, log)
+      },
+    },
+  },
 })

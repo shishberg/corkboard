@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { ImageEl } from '@/stores/types'
+import { imageUrl } from '@/lib/deviceApi'
 
 defineProps<{ el: ImageEl }>()
 </script>
 
 <template>
-  <img v-if="el.src" :src="el.src" class="h-full w-full object-contain" alt="" />
+  <img v-if="el.src" :src="imageUrl(el.src)" class="h-full w-full object-contain" alt="" />
   <div
     v-else
     data-role="placeholder"

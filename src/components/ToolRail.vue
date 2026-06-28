@@ -7,6 +7,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import {
   MousePointer2, Calendar, Pencil, Image as ImageIcon, Trash2, Type,
+  BringToFront, SendToBack, PaintBucket,
 } from '@lucide/vue'
 import CalendarOptions from './ToolOptions/CalendarOptions.vue'
 import DrawOptions from './ToolOptions/DrawOptions.vue'
@@ -31,9 +32,18 @@ const selectedEl = computed(() => {
   return store.selectedPage?.elements.find((e) => e.id === id) ?? null
 })
 
-const activeColour = computed(() => selectedEl.value?.colour ?? opts.colour)
+// With the background tool active the swatches recolour the page background;
+// otherwise they reflect the selected element's colour, else the pen colour.
+const activeColour = computed(() => {
+  if (store.activeTool === 'background') return store.selectedPage?.background ?? 'white'
+  return selectedEl.value?.colour ?? opts.colour
+})
 
 function pickColour(c: EpaperColour) {
+  if (store.activeTool === 'background') {
+    store.setPageBackground(c)
+    return
+  }
   opts.colour = c
   if (selectedEl.value) {
     store.setElementColour(selectedEl.value.id, c)
@@ -118,6 +128,49 @@ function pickColour(c: EpaperColour) {
         </PopoverTrigger>
         <PopoverContent side="right" class="w-48"><TextOptions /></PopoverContent>
       </Popover>
+
+      <!-- Background: while active, the colour swatches recolour the page -->
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <button
+            data-tool="background"
+            class="flex h-9 w-9 items-center justify-center rounded hover:bg-neutral-200"
+            :class="store.activeTool === 'background' ? 'bg-neutral-200' : ''"
+            @click="pickTool('background')"
+          >
+            <PaintBucket class="h-5 w-5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">Background colour</TooltipContent>
+      </Tooltip>
+
+      <!-- Z-order: move selected element in front of / behind the others -->
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <button
+            data-role="bring-to-front"
+            class="mt-2 flex h-9 w-9 items-center justify-center rounded text-neutral-600 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+            :disabled="!store.selectedElId"
+            @click="store.bringToFront()"
+          >
+            <BringToFront class="h-5 w-5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">Bring to front</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <button
+            data-role="send-to-back"
+            class="flex h-9 w-9 items-center justify-center rounded text-neutral-600 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+            :disabled="!store.selectedElId"
+            @click="store.sendToBack()"
+          >
+            <SendToBack class="h-5 w-5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">Send to back</TooltipContent>
+      </Tooltip>
 
       <!-- Delete selected element -->
       <Tooltip>

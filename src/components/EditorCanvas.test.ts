@@ -19,6 +19,10 @@ function calendarEl(id: string) {
   return { id, type: 'calendar' as const, variant: 'week' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const }
 }
 
+function textEl(id: string) {
+  return { id, type: 'text' as const, x: 0, y: 0, w: 200, h: 80, colour: 'black' as const, text: 'Hello', font: 'atkinson-hyperlegible', align: 'left' as const }
+}
+
 describe('EditorCanvas', () => {
   it('dragging a movable element updates its position in the store', async () => {
     const store = usePagesStore()
@@ -35,6 +39,15 @@ describe('EditorCanvas', () => {
     expect(moved?.x).toBe(20)
     expect(moved?.y).toBe(30)
     w.unmount()
+  })
+
+  it('paints the surface with the page background colour', async () => {
+    const store = usePagesStore()
+    store.setPageBackground('yellow')
+    const w = mount(EditorCanvas)
+    await nextTick()
+    const style = w.get('[data-role="surface"]').attributes('style') ?? ''
+    expect(style.replace(/\s/g, '')).toContain('background-color:yellow')
   })
 
   it('renders one MovableElement per element on the selected page', async () => {
@@ -209,6 +222,58 @@ describe('EditorCanvas', () => {
     await nextTick()
     expect((movable.element as HTMLElement).style.pointerEvents).not.toBe('none')
 
+    w.unmount()
+  })
+
+  it('double-clicking a text element enters edit mode (contenteditable on)', async () => {
+    const store = usePagesStore()
+    store.setActiveTool('select')
+    store.addElement(textEl('t1'))
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+
+    const edit = w.find('[data-role="text-edit"]')
+    expect(edit.attributes('contenteditable')).toBe('false')
+
+    await w.get('[data-role="movable"]').trigger('dblclick')
+    await nextTick()
+    expect(w.find('[data-role="text-edit"]').attributes('contenteditable')).toBe('true')
+    w.unmount()
+  })
+
+  it('Backspace while editing text edits characters, not the element', async () => {
+    const store = usePagesStore()
+    store.setActiveTool('select')
+    store.addElement(textEl('t1'))
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+
+    await w.get('[data-role="movable"]').trigger('dblclick')
+    await nextTick()
+    const node = w.find('[data-role="text-edit"]').element as HTMLElement
+
+    // A Backspace originating from the focused contenteditable must NOT delete
+    // the element — the browser handles it as a character edit.
+    node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }))
+    await nextTick()
+    expect(store.selectedPage?.elements.length).toBe(1)
+    w.unmount()
+  })
+
+  it('leaving edit mode (blur) turns contenteditable back off', async () => {
+    const store = usePagesStore()
+    store.setActiveTool('select')
+    store.addElement(textEl('t1'))
+    const w = mount(EditorCanvas, { attachTo: document.body })
+    await nextTick()
+
+    await w.get('[data-role="movable"]').trigger('dblclick')
+    await nextTick()
+    expect(w.find('[data-role="text-edit"]').attributes('contenteditable')).toBe('true')
+
+    await w.find('[data-role="text-edit"]').trigger('blur')
+    await nextTick()
+    expect(w.find('[data-role="text-edit"]').attributes('contenteditable')).toBe('false')
     w.unmount()
   })
 

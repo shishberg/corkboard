@@ -5,7 +5,7 @@ use image::{codecs::png::PngEncoder, ImageEncoder};
 use crate::{
     calendar::CalendarData,
     config::Config,
-    document::{CalendarVariant, Document, Element, TextAlign},
+    document::{CalendarVariant, Colour, Document, Element, TextAlign},
     fonts::Fonts,
     sample,
     storage::Storage,
@@ -36,7 +36,14 @@ pub fn render(
 
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| anyhow::anyhow!("failed to create pixmap {}×{}", w, h))?;
-    pixmap.fill(tiny_skia::Color::WHITE);
+
+    // Paint the page background (white when unset), then draw elements on top.
+    let bg = doc
+        .live_page()
+        .and_then(|p| p.background.clone())
+        .unwrap_or(Colour::White)
+        .rgb();
+    pixmap.fill(tiny_skia::Color::from_rgba8(bg[0], bg[1], bg[2], 255));
 
     if let Some(page) = doc.live_page() {
         for el in &page.elements {
@@ -393,8 +400,15 @@ mod tests {
                 id: page_id,
                 name: "Test".to_string(),
                 elements,
+                background: None,
             }],
         }
+    }
+
+    fn make_doc_with_background(bg: Colour) -> Document {
+        let mut doc = make_doc(vec![]);
+        doc.pages[0].background = Some(bg);
+        doc
     }
 
     #[test]
@@ -443,6 +457,23 @@ mod tests {
                 "pixel {:?} not in palette",
                 rgb
             );
+        }
+    }
+
+    #[test]
+    fn page_background_fills_the_surface() {
+        // With no elements, a blue page background should paint every pixel blue.
+        let doc = make_doc_with_background(Colour::Blue);
+        let cfg = Config::default();
+        let fonts = Fonts::load();
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(dir.path());
+        let cal = CalendarData::empty();
+        let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
+        let img = image::load_from_memory(&png).unwrap().to_rgb8();
+        let blue = Colour::Blue.rgb();
+        for pixel in img.pixels() {
+            assert_eq!([pixel[0], pixel[1], pixel[2]], blue, "non-blue background pixel");
         }
     }
 

@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia'
-import type { DocState, El, Page, ToolId, BaseEl, EpaperColour, TextEl } from './types'
+import type { DocState, El, Page, ToolId, BaseEl, EpaperColour, TextEl, ImageEl } from './types'
 
 let counter = 0
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
 function blankPage(): Page {
-  return { id: uid('page'), name: 'Page', elements: [] }
+  return { id: uid('page'), name: 'Page', elements: [], background: 'white' }
 }
 
 export const usePagesStore = defineStore('pages', {
@@ -62,6 +62,28 @@ export const usePagesStore = defineStore('pages', {
     selectElement(id: string | null) {
       this.selectedElId = id
     },
+    // Elements render in array order, so the last element is drawn on top.
+    // "Front" = end of the array, "back" = start.
+    bringToFront(id?: string) {
+      const el = this._takeElement(id)
+      if (el) this._currentElements()?.push(el)
+    },
+    sendToBack(id?: string) {
+      const el = this._takeElement(id)
+      if (el) this._currentElements()?.unshift(el)
+    },
+    // Remove and return the target element from the current page (or null).
+    _takeElement(id?: string): El | null {
+      const targetId = id ?? this.selectedElId
+      if (!targetId) return null
+      const els = this._currentElements()
+      const i = els?.findIndex((e) => e.id === targetId) ?? -1
+      if (!els || i === -1) return null
+      return els.splice(i, 1)[0]
+    },
+    _currentElements(): El[] | null {
+      return this.pages.find((p) => p.id === this.selectedPageId)?.elements ?? null
+    },
     deleteElement(id?: string) {
       const targetId = id ?? this.selectedElId
       if (!targetId) return
@@ -107,6 +129,16 @@ export const usePagesStore = defineStore('pages', {
         for (const stroke of el.strokes) stroke.colour = colour
       }
     },
+    setElementSrc(id: string, src: string) {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      const el = page?.elements.find((e) => e.id === id)
+      if (!el || el.type !== 'image') return
+      ;(el as ImageEl).src = src
+    },
+    setPageBackground(colour: EpaperColour) {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      if (page) page.background = colour
+    },
     setElementText(id: string, text: string) {
       const page = this.pages.find((p) => p.id === this.selectedPageId)
       const el = page?.elements.find((e) => e.id === id)
@@ -128,7 +160,8 @@ export const usePagesStore = defineStore('pages', {
     hydrate(doc: DocState) {
       if (!doc.pages || doc.pages.length === 0) return
       this.orientation = doc.orientation
-      this.pages = doc.pages
+      // Older documents predate per-page backgrounds; default them to white.
+      this.pages = doc.pages.map((p) => ({ ...p, background: p.background ?? 'white' }))
       this.activeTool = doc.activeTool
       this.selectedElId = doc.selectedElId
       const pageIds = new Set(doc.pages.map((p) => p.id))

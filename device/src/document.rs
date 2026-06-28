@@ -147,6 +147,10 @@ pub struct Page {
     pub id: String,
     pub name: String,
     pub elements: Vec<Element>,
+    /// Page background colour. Absent in documents that predate backgrounds;
+    /// the renderer treats `None` as white.
+    #[serde(default)]
+    pub background: Option<Colour>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -166,6 +170,7 @@ impl Document {
                 id: page_id.clone(),
                 name: "Page 1".to_string(),
                 elements: vec![],
+                background: None,
             }],
             live_page_id: Some(page_id),
         }

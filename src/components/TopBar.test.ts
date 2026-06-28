@@ -15,29 +15,9 @@ afterEach(() => {
 })
 
 describe('TopBar', () => {
-  it('shows Refreshing… toast when refreshNow returns true', async () => {
-    vi.spyOn(deviceApi, 'refreshNow').mockResolvedValue(true)
+  it('has no Refresh button — Publish re-fetches and refreshes on its own', () => {
     const w = mount(TopBar)
-    await w.get('[data-role="refresh"]').trigger('click')
-    await w.vm.$nextTick()
-    await w.vm.$nextTick()
-    expect(w.get('[data-role="toast"]').text()).toBe('Refreshing…')
-  })
-
-  it('shows Device offline toast when refreshNow returns false', async () => {
-    vi.spyOn(deviceApi, 'refreshNow').mockResolvedValue(false)
-    const w = mount(TopBar)
-    await w.get('[data-role="refresh"]').trigger('click')
-    await w.vm.$nextTick()
-    await w.vm.$nextTick()
-    expect(w.get('[data-role="toast"]').text()).toBe('Device offline')
-  })
-
-  it('calls refreshNow when Refresh now button is clicked', async () => {
-    const spy = vi.spyOn(deviceApi, 'refreshNow').mockResolvedValue(true)
-    const w = mount(TopBar)
-    await w.get('[data-role="refresh"]').trigger('click')
-    expect(spy).toHaveBeenCalledOnce()
+    expect(w.find('[data-role="refresh"]').exists()).toBe(false)
   })
 
   it('calls putDocument with the store state and shows Published toast on success', async () => {
@@ -58,5 +38,22 @@ describe('TopBar', () => {
     await w.vm.$nextTick()
     await w.vm.$nextTick()
     expect(w.get('[data-role="toast"]').text()).toBe('Device offline')
+  })
+
+  it('Publish makes the currently selected page live', async () => {
+    vi.spyOn(deviceApi, 'putDocument').mockResolvedValue(true)
+    const store = usePagesStore()
+    const second = store.addPage() // addPage selects the new page
+    expect(store.livePageId).not.toBe(second)
+    const w = mount(TopBar)
+    await w.get('[data-role="publish"]').trigger('click')
+    expect(store.livePageId).toBe(second)
+  })
+
+  it('has a Preview link that opens preview.png in a new tab', () => {
+    const w = mount(TopBar)
+    const preview = w.get('[data-role="preview"]')
+    expect(preview.attributes('href')).toBe('/preview.png')
+    expect(preview.attributes('target')).toBe('_blank')
   })
 })

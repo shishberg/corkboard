@@ -10,6 +10,7 @@ const props = defineProps<{
   selected: boolean
   scale: number
   interactive?: boolean
+  editing?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +25,10 @@ const dr = useDraggableResizable({
 })
 
 function onPointerDown(e: PointerEvent) {
+  // While editing text, let the pointer reach the contenteditable so the caret
+  // lands where the user clicks — don't start a drag (which preventDefaults
+  // focus) or it's impossible to place the cursor or select text.
+  if (props.editing) return
   emit('select', props.id)
   dr.startDrag(e)
 }

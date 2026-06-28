@@ -20,6 +20,11 @@ describe('makeElement', () => {
     if (el.type === 'image') expect(el.src).toBe('')
   })
 
+  it('uses opts.imageId as the src when one is pending', () => {
+    const el = makeElement('image', { ...opts, imageId: 'img-xyz' }, size)
+    if (el.type === 'image') expect(el.src).toBe('img-xyz')
+  })
+
   it('uses an explicit rect when one is given (draw-to-place)', () => {
     const el = makeElement('image', opts, size, { x: 10, y: 20, w: 120, h: 90 })
     expect(el.x).toBe(10)

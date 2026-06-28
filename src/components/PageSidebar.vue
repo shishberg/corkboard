@@ -27,12 +27,7 @@ const store = usePagesStore()
           data-role="live-badge"
           class="rounded-full bg-green-500 px-1.5 py-0.5 text-xs font-medium text-white"
         >Live</span>
-        <button
-          v-else
-          data-role="make-live"
-          class="rounded bg-neutral-200 px-1.5 py-0.5 text-xs hover:bg-green-100"
-          @click.stop="store.setLivePage(p.id)"
-        >Make live</button>
+        <span v-else></span>
         <button
           v-if="store.pages.length > 1"
           data-role="delete-page"

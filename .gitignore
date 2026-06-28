@@ -24,7 +24,9 @@ dist-ssr
 *.sw?
 .serena/
 device/target/
+device/data/
 
 # Playwright
 test-results/
 playwright-report/
+.playwright-mcp/

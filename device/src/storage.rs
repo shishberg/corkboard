@@ -163,6 +163,7 @@ mod tests {
                     colour: Colour::White,
                     src: Some("img-keep".to_string()),
                 })],
+                background: None,
             }],
         };
 

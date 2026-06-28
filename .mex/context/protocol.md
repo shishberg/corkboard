@@ -17,7 +17,7 @@ edges:
     condition: for the panel the renderer targets
   - target: patterns/device-api.md
     condition: for the how-to runbook of the load/publish flow
-last_updated: 2026-06-27
+last_updated: 2026-06-28
 ---
 
 # Editor ⇄ Device protocol
@@ -42,6 +42,8 @@ document and serves the editor, the API, and the preview on one origin (LAN, no 
 The editor's `DocState` IS the wire format. Round-two changes from the round-one shape:
 - **Removed:** `ClockEl`; `timeline` / `TimelineEntry`.
 - **Added:** `livePageId: string | null` on `DocState` (which page is displayed).
+- **Added:** `Page.background?: EpaperColour` (per-page background; absent = white). The device
+  fills the surface with it before drawing elements (`#[serde(default)]`, so older docs parse).
 - **Changed:** `CalendarEl` drops the frozen `events: CalEvent[]` and instead holds
   `feedId: string` + `variant: 'date' | 'today' | 'week'`. Events are resolved on the device
   at render time, never stored in the document.

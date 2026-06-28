@@ -10,6 +10,9 @@ interface ToolOptionsState {
   feedId: string
   font: string
   align: 'left' | 'center'
+  // The most-recently uploaded image, used as the src for the next image placed.
+  // Session-only: never restored from localStorage (the id is document-scoped).
+  imageId: string
 }
 
 const defaults: ToolOptionsState = {
@@ -19,6 +22,7 @@ const defaults: ToolOptionsState = {
   feedId: '',
   font: 'atkinson-hyperlegible',
   align: 'left',
+  imageId: '',
 }
 
 function load(): ToolOptionsState {
@@ -36,6 +40,9 @@ function load(): ToolOptionsState {
       feedId: (parsed.feedId ?? defaults.feedId) as ToolOptionsState['feedId'],
       font: (parsed.font ?? defaults.font) as ToolOptionsState['font'],
       align: (parsed.align ?? defaults.align) as ToolOptionsState['align'],
+      // Always start a session with no pending image — image ids are tied to a
+      // document on the device, so a persisted one could dangle.
+      imageId: defaults.imageId,
     }
   } catch {
     return { ...defaults }

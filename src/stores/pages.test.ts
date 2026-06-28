@@ -146,6 +146,85 @@ describe('usePagesStore', () => {
     expect(s.selectedPage?.elements[0].type).toBe('image')
   })
 
+  it('a blank page starts with a white background', () => {
+    const s = usePagesStore()
+    expect(s.selectedPage?.background).toBe('white')
+  })
+
+  it('setPageBackground sets the current page background colour', () => {
+    const s = usePagesStore()
+    s.setPageBackground('blue')
+    expect(s.selectedPage?.background).toBe('blue')
+  })
+
+  it('hydrate defaults a missing page background to white', () => {
+    const s = usePagesStore()
+    const doc: DocState = {
+      orientation: 'landscape',
+      pages: [{ id: 'p1', name: 'Page', elements: [] }],
+      livePageId: 'p1',
+      selectedPageId: 'p1',
+      selectedElId: null,
+      activeTool: 'select',
+    }
+    s.hydrate(doc)
+    expect(s.selectedPage?.background).toBe('white')
+  })
+
+  it('bringToFront moves the element to the end of the array (drawn last = on top)', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('a'))
+    s.addElement(imageEl('b'))
+    s.addElement(imageEl('c'))
+    s.bringToFront('a')
+    expect(s.selectedPage?.elements.map((e) => e.id)).toEqual(['b', 'c', 'a'])
+  })
+
+  it('sendToBack moves the element to the start of the array (drawn first = behind)', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('a'))
+    s.addElement(imageEl('b'))
+    s.addElement(imageEl('c'))
+    s.sendToBack('c')
+    expect(s.selectedPage?.elements.map((e) => e.id)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('bringToFront/sendToBack default to the selected element', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('a'))
+    s.addElement(imageEl('b'))
+    s.selectElement('a')
+    s.bringToFront()
+    expect(s.selectedPage?.elements.map((e) => e.id)).toEqual(['b', 'a'])
+    s.selectElement('a')
+    s.sendToBack()
+    expect(s.selectedPage?.elements.map((e) => e.id)).toEqual(['a', 'b'])
+  })
+
+  it('bringToFront is a no-op for an unknown id', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('a'))
+    s.addElement(imageEl('b'))
+    s.bringToFront('ghost')
+    expect(s.selectedPage?.elements.map((e) => e.id)).toEqual(['a', 'b'])
+  })
+
+  it('setElementSrc sets src on an image element', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('i1'))
+    s.setElementSrc('i1', 'img-abc123')
+    const el = s.selectedPage?.elements[0] as ImageEl
+    expect(el.src).toBe('img-abc123')
+  })
+
+  it('setElementSrc is a no-op for a non-image element', () => {
+    const s = usePagesStore()
+    s.addElement(textEl('t1'))
+    s.setElementSrc('t1', 'img-abc123')
+    const el = s.selectedPage?.elements[0] as TextEl
+    expect(el.text).toBe('Text')
+  })
+
   it('setElementFont sets font on a text element', () => {
     const s = usePagesStore()
     s.addElement(textEl('t1'))

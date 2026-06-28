@@ -46,3 +46,25 @@ export async function putDocument(doc: DocState): Promise<boolean> {
     return false
   }
 }
+
+/** The same-origin URL the device serves a stored image at, by its id. */
+export function imageUrl(id: string): string {
+  return `/api/images/${id}`
+}
+
+/**
+ * POST /api/images — uploads raw image bytes; returns the device-assigned image
+ * id (`img-<uuid>`) to store as an element's `src`, or null on any failure.
+ * The Blob's type sets the request Content-Type; the device sniffs the real
+ * format from the bytes on read.
+ */
+export async function uploadImage(file: Blob): Promise<string | null> {
+  try {
+    const res = await fetch('/api/images', { method: 'POST', body: file })
+    if (!res.ok) return null
+    const data = (await res.json()) as { id?: string }
+    return typeof data.id === 'string' ? data.id : null
+  } catch {
+    return null
+  }
+}

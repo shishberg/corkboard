@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { fetchFeeds, refreshNow, getDocument, putDocument } from './deviceApi'
+import { fetchFeeds, refreshNow, getDocument, putDocument, uploadImage } from './deviceApi'
 import type { DocState } from '@/stores/types'
 
 afterEach(() => {
@@ -110,5 +110,41 @@ describe('putDocument', () => {
   it('returns false when fetch throws', async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error('offline'))
     expect(await putDocument(doc)).toBe(false)
+  })
+})
+
+describe('uploadImage', () => {
+  const file = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })
+
+  it('POSTs the file to /api/images and returns the new id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'img-abc123' }),
+    } as unknown as Response)
+    global.fetch = fetchMock
+    const id = await uploadImage(file)
+    expect(id).toBe('img-abc123')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/images')
+    expect(init.method).toBe('POST')
+    expect(init.body).toBe(file)
+  })
+
+  it('returns null on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 } as unknown as Response)
+    expect(await uploadImage(file)).toBeNull()
+  })
+
+  it('returns null when fetch throws', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('offline'))
+    expect(await uploadImage(file)).toBeNull()
+  })
+
+  it('returns null when the response has no id', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as unknown as Response)
+    expect(await uploadImage(file)).toBeNull()
   })
 })

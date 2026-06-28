@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { usePagesStore } from '@/stores/pages'
 import { Button } from '@/components/ui/button'
 import { RectangleHorizontal, RectangleVertical } from '@lucide/vue'
-import { refreshNow, putDocument } from '@/lib/deviceApi'
+import { putDocument } from '@/lib/deviceApi'
 import type { DocState } from '@/stores/types'
 
 const store = usePagesStore()
@@ -15,13 +15,12 @@ function showToast(msg: string) {
 }
 
 async function publish() {
+  // Publish promotes the page you're looking at to the live (displayed) page,
+  // then re-sends the document; the device re-resolves the calendar feeds and
+  // re-renders, so a no-op Publish doubles as "refresh now".
+  if (store.selectedPageId) store.setLivePage(store.selectedPageId)
   const ok = await putDocument(store.$state as DocState)
   showToast(ok ? 'Published' : 'Device offline')
-}
-
-async function handleRefresh() {
-  const ok = await refreshNow()
-  showToast(ok ? 'Refreshing…' : 'Device offline')
 }
 </script>
 
@@ -38,7 +37,7 @@ async function handleRefresh() {
         <component :is="store.orientation === 'landscape' ? RectangleHorizontal : RectangleVertical" class="h-4 w-4" />
         {{ store.orientation }}
       </button>
-      <Button data-role="refresh" size="sm" variant="outline" @click="handleRefresh">Refresh now</Button>
+      <Button data-role="preview" as="a" href="/preview.png" target="_blank" rel="noopener" variant="outline" size="sm">Preview</Button>
       <Button data-role="publish" size="sm" @click="publish">Publish</Button>
     </div>
   </header>

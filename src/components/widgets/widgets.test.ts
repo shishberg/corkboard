@@ -49,6 +49,15 @@ describe('widgets', () => {
     expect(w.find('[data-role="placeholder"]').exists()).toBe(true)
   })
 
+  it('ImageWidget renders the device image URL when src holds an image id', () => {
+    const el: ImageEl = { id: 'img', type: 'image', src: 'img-abc123', x: 0, y: 0, w: 200, h: 150, colour: 'black' }
+    const w = mount(ImageWidget, { props: { el } })
+    const img = w.find('img')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toBe('/api/images/img-abc123')
+    expect(w.find('[data-role="placeholder"]').exists()).toBe(false)
+  })
+
   it('DrawingWidget viewBox uses natW/natH, not resized w/h', () => {
     const el = makeDrawingElement([{ x: 50, y: 60 }, { x: 90, y: 110 }], 'black', 4)
     // Simulate a resize — w and h change, natW/natH must not
@@ -116,46 +125,45 @@ describe('TextWidget', () => {
     expect(edit.attributes('style')).toContain('center')
   })
 
-  it('is NOT editable when element is not selected', () => {
-    // activePinia is fresh; selectedElId is null, activeTool defaults to 'select'
+  it('is NOT editable when editing is false', () => {
+    const w = mount(TextWidget, { props: { el: sampleEl, editing: false } })
+    const edit = w.find('[data-role="text-edit"]')
+    expect(edit.attributes('contenteditable')).toBe('false')
+  })
+
+  it('defaults to not editable when editing prop is omitted', () => {
     const w = mount(TextWidget, { props: { el: sampleEl } })
     const edit = w.find('[data-role="text-edit"]')
     expect(edit.attributes('contenteditable')).toBe('false')
   })
 
-  it('is NOT editable when a different element is selected', () => {
-    const store = usePagesStore()
-    store.selectedElId = 'other-id'
-    const w = mount(TextWidget, { props: { el: sampleEl } })
-    const edit = w.find('[data-role="text-edit"]')
-    expect(edit.attributes('contenteditable')).toBe('false')
-  })
-
-  it('is editable when this element is selected and select tool is active', () => {
-    const store = usePagesStore()
-    store.selectedElId = sampleEl.id
-    store.activeTool = 'select'
-    const w = mount(TextWidget, { props: { el: sampleEl } })
+  it('is editable when editing is true', () => {
+    const w = mount(TextWidget, { props: { el: sampleEl, editing: true } })
     const edit = w.find('[data-role="text-edit"]')
     expect(edit.attributes('contenteditable')).toBe('true')
   })
 
-  it('is NOT editable when this element is selected but a non-select tool is active', () => {
-    const store = usePagesStore()
-    store.selectedElId = sampleEl.id
-    store.activeTool = 'text'
-    const w = mount(TextWidget, { props: { el: sampleEl } })
-    const edit = w.find('[data-role="text-edit"]')
-    expect(edit.attributes('contenteditable')).toBe('false')
+  it('focuses the contenteditable when editing turns on', async () => {
+    const w = mount(TextWidget, { props: { el: sampleEl, editing: false }, attachTo: document.body })
+    const node = w.find('[data-role="text-edit"]').element as HTMLElement
+    expect(document.activeElement).not.toBe(node)
+    await w.setProps({ editing: true })
+    await nextTick()
+    expect(document.activeElement).toBe(node)
+    w.unmount()
+  })
+
+  it('emits stop-editing when the contenteditable blurs', async () => {
+    const w = mount(TextWidget, { props: { el: sampleEl, editing: true } })
+    await w.find('[data-role="text-edit"]').trigger('blur')
+    expect(w.emitted('stopEditing')).toBeTruthy()
   })
 
   it('input event calls store.setElementText with the innerText', async () => {
     const store = usePagesStore()
-    store.selectedElId = sampleEl.id
-    store.activeTool = 'select'
     store.addElement(sampleEl)
 
-    const w = mount(TextWidget, { props: { el: sampleEl } })
+    const w = mount(TextWidget, { props: { el: sampleEl, editing: true } })
     const edit = w.find('[data-role="text-edit"]')
 
     // Simulate innerText being set and an input event fired

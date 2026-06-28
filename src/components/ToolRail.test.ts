@@ -35,6 +35,61 @@ describe('ToolRail', () => {
     expect((del.element as HTMLButtonElement).disabled).toBe(true)
   })
 
+  it('bring-to-front moves the selected element to the end of the array', async () => {
+    const store = usePagesStore()
+    store.addElement(calendarEl('a'))
+    store.addElement(calendarEl('b'))
+    store.selectElement('a')
+    const w = mount(ToolRail)
+    await w.get('[data-role="bring-to-front"]').trigger('click')
+    expect(store.selectedPage?.elements.map((e) => e.id)).toEqual(['b', 'a'])
+  })
+
+  it('send-to-back moves the selected element to the start of the array', async () => {
+    const store = usePagesStore()
+    store.addElement(calendarEl('a'))
+    store.addElement(calendarEl('b'))
+    store.selectElement('b')
+    const w = mount(ToolRail)
+    await w.get('[data-role="send-to-back"]').trigger('click')
+    expect(store.selectedPage?.elements.map((e) => e.id)).toEqual(['b', 'a'])
+  })
+
+  it('z-order buttons are disabled when nothing is selected', () => {
+    const w = mount(ToolRail)
+    expect((w.get('[data-role="bring-to-front"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect((w.get('[data-role="send-to-back"]').element as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('selecting the background tool sets it active', async () => {
+    const store = usePagesStore()
+    const w = mount(ToolRail)
+    await w.get('[data-tool="background"]').trigger('click')
+    expect(store.activeTool).toBe('background')
+  })
+
+  it('with the background tool active, a swatch sets the page background, not an element', async () => {
+    const store = usePagesStore()
+    store.addElement(calendarEl('e1')) // selected
+    const opts = useToolOptionsStore()
+    store.setActiveTool('background')
+    const w = mount(ToolRail)
+    await w.get('[data-colour="red"]').trigger('click')
+    expect(store.selectedPage?.background).toBe('red')
+    // the selected element keeps its colour; opts.colour is unchanged too
+    expect(store.selectedPage?.elements[0].colour).toBe('black')
+    expect(opts.colour).not.toBe('red')
+  })
+
+  it('with the background tool active, the panel highlights the page background', async () => {
+    const store = usePagesStore()
+    store.setPageBackground('green')
+    store.setActiveTool('background')
+    const w = mount(ToolRail)
+    await nextTick()
+    expect(w.get('[data-colour="green"]').classes().join(' ')).toContain('ring')
+  })
+
   it('mounting ToolRail wires tool-option persistence to localStorage', async () => {
     const opts = useToolOptionsStore()
     mount(ToolRail)
