@@ -85,13 +85,15 @@ pub fn render(
                                 sample::format_sample_date(sample::SAMPLE_TODAY)
                             };
 
-                            let date_px = (el.w.min(el.h) * 0.18).clamp(12.0, 72.0);
-                            let date_line_h = date_px * 1.25;
+                            // Auto-size the date to fill its box, exactly like a
+                            // text element, so it isn't perpetually tiny. The
+                            // editor's CalendarWidget mirrors this fit.
+                            let date_px = text::fit_font_size(font, &date_str, el.w, el.h, 10.0, 240.0);
                             text::draw_text(
                                 &mut pixmap,
                                 font,
                                 &date_str,
-                                el.x, el.y, el.w, date_line_h,
+                                el.x, el.y, el.w, el.h,
                                 date_px,
                                 text::Align::Center,
                                 colour,

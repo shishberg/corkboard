@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import type { CalendarEl } from '@/stores/types'
 import { useFontsStore } from '@/stores/fonts'
+import { fitFontSize } from '@/lib/textFit'
 import { formatSampleDate, SAMPLE_TODAY_EVENTS, sampleAgenda, format12h } from '@/lib/sampleCalendar'
 
 const props = defineProps<{ el: CalendarEl }>()
@@ -13,8 +14,34 @@ const variant = computed(() => props.el.variant)
 const effectiveFont = computed(() => props.el.font || fonts.defaultId)
 const formattedDate = computed(() => formatSampleDate())
 
-// Date and Today keep the simple min-dimension base size.
+// Today keeps the simple min-dimension base size.
 const baseSize = computed(() => `${Math.max(6, Math.min(props.el.w, props.el.h) * 0.06)}px`)
+
+// Date variant: auto-size the date to fill its box, exactly like a text field
+// (same fit as the device renderer) so it isn't perpetually tiny and the preview
+// matches the panel. Recompute when the box, font or date changes.
+const datePx = ref(10)
+function recomputeDateFit() {
+  if (variant.value !== 'date') return
+  datePx.value = fitFontSize(formattedDate.value, props.el.w, props.el.h, effectiveFont.value)
+}
+watch(
+  () => [variant.value, props.el.w, props.el.h, effectiveFont.value, formattedDate.value] as const,
+  recomputeDateFit,
+  { immediate: true },
+)
+// Text measurement only reflects the real font once it has loaded; recompute on
+// every font-ready signal we have (mirrors TextWidget).
+onMounted(() => {
+  recomputeDateFit()
+  const fontSet = (document as Document & { fonts?: FontFaceSet }).fonts
+  if (fontSet) {
+    fontSet.load(`16px ${effectiveFont.value}`).then(recomputeDateFit, recomputeDateFit)
+    fontSet.ready.then(recomputeDateFit)
+  }
+  requestAnimationFrame(() => requestAnimationFrame(recomputeDateFit))
+})
+const datePxSize = computed(() => `${datePx.value}px`)
 
 // Agenda: choose one font size so every day heading and event fits the height,
 // using the same arithmetic as the device renderer (render.rs draw_agenda) so
@@ -51,8 +78,8 @@ function eventLine(ev: { time: string; title: string }): string {
     <div
       v-if="variant === 'date'"
       data-role="calendar-date"
-      class="flex h-full items-center justify-center p-2 text-center font-bold"
-      :style="{ fontSize: baseSize }"
+      class="flex h-full items-center justify-center text-center font-bold"
+      :style="{ fontSize: datePxSize }"
     >
       {{ formattedDate }}
     </div>
