@@ -57,8 +57,9 @@ pub struct ResolvedFeed {
     pub today: Vec<ResolvedEvent>,
     /// Events for the next 7 days: index 0 = today, 1 = tomorrow, … 6 = today+6.
     pub week: [Vec<ResolvedEvent>; 7],
-    /// Abbreviated weekday name for each `week` slot (e.g. "Sat","Sun","Mon"…),
-    /// since the window now floats with today rather than being a fixed Mon…Sun.
+    /// Full weekday name for each `week` slot (e.g. "Saturday","Sunday"…), since
+    /// the window floats with today rather than being a fixed Mon…Sun. The
+    /// agenda view shows "Today"/"Tomorrow" for slots 0/1 and these names after.
     pub week_labels: [String; 7],
 }
 
@@ -320,7 +321,7 @@ pub fn resolve(events: &[VEvent], today: (i32, u32, u32)) -> ResolvedFeed {
     let week: [Vec<ResolvedEvent>; 7] =
         std::array::from_fn(|i| events_on(today_nd + Days::new(i as u64)));
     let week_labels: [String; 7] =
-        std::array::from_fn(|i| weekday_abbrev(today_nd + Days::new(i as u64)));
+        std::array::from_fn(|i| weekday_full(today_nd + Days::new(i as u64)));
 
     ResolvedFeed {
         today: events_on(today_nd),
@@ -329,10 +330,12 @@ pub fn resolve(events: &[VEvent], today: (i32, u32, u32)) -> ResolvedFeed {
     }
 }
 
-/// Three-letter weekday abbreviation ("Mon"…"Sun") for a date.
-fn weekday_abbrev(date: chrono::NaiveDate) -> String {
+/// Full weekday name ("Monday"…"Sunday") for a date.
+fn weekday_full(date: chrono::NaiveDate) -> String {
     use chrono::Datelike;
-    const NAMES: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const NAMES: [&str; 7] = [
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    ];
     NAMES[date.weekday().num_days_from_monday() as usize].to_string()
 }
 
@@ -671,7 +674,10 @@ mod tests {
     #[test]
     fn resolve_week_labels_name_each_days_weekday() {
         let feed = resolve(&fixture_events(), TODAY);
-        assert_eq!(feed.week_labels, ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"]);
+        assert_eq!(
+            feed.week_labels,
+            ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        );
     }
 
     #[test]

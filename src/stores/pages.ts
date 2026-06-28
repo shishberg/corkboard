@@ -172,6 +172,12 @@ export const usePagesStore = defineStore('pages', {
         ...p,
         background: p.background ?? 'white',
         orientation: p.orientation ?? legacyOrientation,
+        // Migrate the legacy 'week' calendar variant to 'agenda'.
+        elements: p.elements.map((el) =>
+          el.type === 'calendar' && (el.variant as string) === 'week'
+            ? { ...el, variant: 'agenda' as const }
+            : el,
+        ),
       }))
       this.activeTool = doc.activeTool
       this.selectedElId = doc.selectedElId

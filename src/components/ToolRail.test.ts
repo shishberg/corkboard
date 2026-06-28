@@ -7,7 +7,7 @@ import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore } from '@/stores/toolOptions'
 
 function calendarEl(id: string) {
-  return { id, type: 'calendar' as const, variant: 'week' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const }
+  return { id, type: 'calendar' as const, variant: 'agenda' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const }
 }
 
 beforeEach(() => {
@@ -95,10 +95,10 @@ describe('ToolRail', () => {
     mount(ToolRail)
     // ToolRail calls ensureToolOptionsPersistence() onMounted; changing an
     // option should now write through to localStorage.
-    opts.calendarVariant = 'week'
+    opts.calendarVariant = 'agenda'
     await nextTick()
     const saved = JSON.parse(localStorage.getItem('corkboard.toolOptions') || '{}')
-    expect(saved.calendarVariant).toBe('week')
+    expect(saved.calendarVariant).toBe('agenda')
   })
 
   it('colour panel renders 6 swatches', async () => {

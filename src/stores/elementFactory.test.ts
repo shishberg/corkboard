@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { makeElement, makeDrawingElement, imagePlacement } from './elementFactory'
 
-const opts = { calendarVariant: 'week' as const, colour: 'red' as const, feedId: 'family', font: 'atkinson-hyperlegible', align: 'left' as const }
+const opts = { calendarVariant: 'agenda' as const, colour: 'red' as const, feedId: 'family', font: 'atkinson-hyperlegible', align: 'left' as const }
 const size = { w: 800, h: 480 }
 
 describe('makeElement', () => {
@@ -9,7 +9,7 @@ describe('makeElement', () => {
     const el = makeElement('calendar', opts, size)
     expect(el.type).toBe('calendar')
     if (el.type === 'calendar') {
-      expect(el.variant).toBe('week')
+      expect(el.variant).toBe('agenda')
       expect(el.feedId).toBe('family')
     }
   })

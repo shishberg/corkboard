@@ -40,28 +40,37 @@ pub const SAMPLE_TODAY_EVENTS: &[(&str, &str)] = &[
     ("15:00", "School pickup"),
 ];
 
-#[allow(dead_code)]
-pub struct WeekEvent {
-    pub time: &'static str,
-    pub title: &'static str,
-}
-
-#[allow(dead_code)]
-pub struct WeekDay {
-    pub day: &'static str,
-    pub events: &'static [WeekEvent],
-}
-
-#[allow(dead_code)]
-pub const SAMPLE_WEEK: &[WeekDay] = &[
-    WeekDay { day: "Mon", events: &[WeekEvent { time: "09:00", title: "Standup" }] },
-    WeekDay { day: "Tue", events: &[WeekEvent { time: "18:00", title: "Soccer" }] },
-    WeekDay { day: "Wed", events: &[] },
-    WeekDay { day: "Thu", events: &[WeekEvent { time: "12:30", title: "Lunch" }] },
-    WeekDay { day: "Fri", events: &[WeekEvent { time: "15:00", title: "Pickup" }] },
-    WeekDay { day: "Sat", events: &[] },
-    WeekDay { day: "Sun", events: &[WeekEvent { time: "10:00", title: "Market" }] },
+/// Sample events for the agenda view, used when no calendar feed is configured.
+/// Anchored to SAMPLE_TODAY (2026-06-27, a Saturday) and mirrored exactly by
+/// sampleCalendar.ts in the editor so the preview matches the panel.
+/// `(year, month, day, "HH:MM" or "" for all-day, title)`.
+const SAMPLE_AGENDA: &[(i32, u32, u32, &str, &str)] = &[
+    (2026, 6, 27, "", "Last day of term"),
+    (2026, 6, 27, "08:15", "Choir"),
+    (2026, 6, 27, "18:00", "Ballet"),
+    (2026, 6, 28, "09:00", "Markets"),
+    (2026, 6, 29, "15:00", "School pickup"),
+    (2026, 6, 30, "18:00", "Soccer"),
+    (2026, 7, 2, "12:30", "Lunch"),
+    (2026, 7, 3, "19:30", "Recorder"),
 ];
+
+/// Build a resolved feed from the sample agenda events, as if it had been
+/// fetched and resolved at SAMPLE_TODAY. Lets the agenda renderer use one code
+/// path for both real feeds and the no-feed sample fallback.
+pub fn sample_feed() -> crate::calendar::ResolvedFeed {
+    use crate::calendar::{resolve, VEvent};
+    let events: Vec<VEvent> = SAMPLE_AGENDA
+        .iter()
+        .map(|&(y, m, d, time, title)| VEvent {
+            summary: title.to_string(),
+            date: (y, m, d),
+            time: if time.is_empty() { None } else { Some(time.to_string()) },
+            ..Default::default()
+        })
+        .collect();
+    resolve(&events, (2026, 6, 27))
+}
 
 #[cfg(test)]
 mod tests {
@@ -70,5 +79,19 @@ mod tests {
     #[test]
     fn format_sample_date_saturday() {
         assert_eq!(format_sample_date("2026-06-27"), "Saturday 27 June");
+    }
+
+    #[test]
+    fn sample_feed_today_and_tomorrow_have_expected_events() {
+        let feed = sample_feed();
+        // Slot 0 = today (Sat 27): all-day "Last day of term" sorts first.
+        assert_eq!(feed.week[0][0].title, "Last day of term");
+        assert!(feed.week[0][0].time.is_empty());
+        assert!(feed.week[0].iter().any(|e| e.title == "Choir" && e.time == "08:15"));
+        // Slot 1 = tomorrow (Sun 28).
+        assert_eq!(feed.week[1].len(), 1);
+        assert_eq!(feed.week[1][0].title, "Markets");
+        // Labels are full weekday names; slot 2 = Monday.
+        assert_eq!(feed.week_labels[2], "Monday");
     }
 }

@@ -4,7 +4,7 @@ let counter = 0
 const uid = () => `el-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
 interface FactoryOpts {
-  calendarVariant: 'date' | 'today' | 'week'
+  calendarVariant: 'date' | 'today' | 'agenda'
   colour: EpaperColour
   feedId: string
   font: string

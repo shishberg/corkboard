@@ -16,10 +16,23 @@ beforeEach(() => {
 })
 
 describe('widgets', () => {
-  it('CalendarWidget renders a week layout with 7 day cells', () => {
-    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'week', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black' }
+  it('CalendarWidget renders an agenda layout with 7 day headings', () => {
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'agenda', x: 0, y: 0, w: 300, h: 400, feedId: '', colour: 'black' }
     const w = mount(CalendarWidget, { props: { el } })
-    expect(w.findAll('[data-role="day"]').length).toBe(7)
+    const days = w.findAll('[data-role="day"]')
+    expect(days.length).toBe(7)
+    expect(days[0].text()).toBe('Today')
+    expect(days[1].text()).toBe('Tomorrow')
+    expect(days[2].text()).toBe('Monday')
+  })
+
+  it('CalendarWidget agenda formats event times as 12-hour and includes all-day items', () => {
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'agenda', x: 0, y: 0, w: 300, h: 400, feedId: '', colour: 'black' }
+    const w = mount(CalendarWidget, { props: { el } })
+    const text = w.get('[data-role="calendar-agenda"]').text()
+    expect(text).toContain('Last day of term') // all-day, no time
+    expect(text).toContain('8:15am Choir')
+    expect(text).toContain('6:00pm Ballet')
   })
 
   it('CalendarWidget applies element colour as text colour', () => {

@@ -32,7 +32,7 @@ const DEVICE_BIN = path.join(ROOT, 'device/target/debug/corkboard-device')
 const FONTS = path.join(ROOT, 'public/fonts')
 
 // ── Test document ─────────────────────────────────────────────────────────────
-// One landscape page with text, calendar (today variant, no feed → sample data),
+// One landscape page with text, calendar (agenda variant, no feed → sample data),
 // and drawing.  Coordinates are well inside the 800×480 canvas.
 
 const PAGE_ID = 'parity-page-1'
@@ -57,16 +57,16 @@ const TEST_DOC = {
           font: 'atkinson-hyperlegible',
           align: 'left',
         },
-        // Calendar element — today variant, mid-left
+        // Calendar element — agenda variant, mid-left
         {
           type: 'calendar',
           id: 'parity-cal-1',
           x: 20,
           y: 120,
           w: 380,
-          h: 300,
+          h: 340,
           colour: 'black',
-          variant: 'today',
+          variant: 'agenda',
           feedId: '',
         },
         // Drawing element — right side, diagonal cross pattern

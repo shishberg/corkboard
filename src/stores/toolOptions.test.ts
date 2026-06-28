@@ -51,7 +51,8 @@ describe('useToolOptionsStore', () => {
     setActivePinia(createPinia())
     const s = useToolOptionsStore()
     expect('clockVariant' in s.$state).toBe(false)
-    expect(s.calendarVariant).toBe('week')
+    // Legacy 'week' variant migrates to 'agenda' on load.
+    expect(s.calendarVariant).toBe('agenda')
     expect(s.colour).toBe('red')
     expect(s.penSize).toBe(8)
   })

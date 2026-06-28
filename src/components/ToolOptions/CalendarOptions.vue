@@ -9,7 +9,7 @@ const feeds = useFeedsStore()
 const variants = [
   { id: 'date', label: 'Date' },
   { id: 'today', label: 'Today' },
-  { id: 'week', label: 'Week' },
+  { id: 'agenda', label: 'Agenda' },
 ] as const
 
 const hasFeeds = computed(() => feeds.feeds.length > 0)

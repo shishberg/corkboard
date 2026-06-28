@@ -4,7 +4,7 @@ import type { EpaperColour } from './types'
 const KEY = 'corkboard.toolOptions'
 
 interface ToolOptionsState {
-  calendarVariant: 'date' | 'today' | 'week'
+  calendarVariant: 'date' | 'today' | 'agenda'
   colour: EpaperColour
   penSize: number
   feedId: string
@@ -28,9 +28,12 @@ function load(): ToolOptionsState {
     const parsed = JSON.parse(raw) as Record<string, unknown>
     // Migrate legacy key: drawColour → colour
     const colour = (parsed.colour ?? parsed.drawColour ?? defaults.colour) as ToolOptionsState['colour']
+    // Migrate legacy calendar variant: 'week' was renamed to 'agenda'.
+    const rawVariant = parsed.calendarVariant ?? defaults.calendarVariant
+    const calendarVariant = (rawVariant === 'week' ? 'agenda' : rawVariant) as ToolOptionsState['calendarVariant']
     // Whitelist only known keys; unknown persisted keys (e.g. stale clockVariant) are dropped
     return {
-      calendarVariant: (parsed.calendarVariant ?? defaults.calendarVariant) as ToolOptionsState['calendarVariant'],
+      calendarVariant,
       colour,
       penSize: (parsed.penSize ?? defaults.penSize) as ToolOptionsState['penSize'],
       feedId: (parsed.feedId ?? defaults.feedId) as ToolOptionsState['feedId'],

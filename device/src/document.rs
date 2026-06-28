@@ -54,7 +54,10 @@ pub struct Stroke {
 pub enum CalendarVariant {
     Date,
     Today,
-    Week,
+    /// 7-day agenda list (Today, Tomorrow, then weekday names). `week` is the
+    /// old wire name, kept as an alias so older saved documents still load.
+    #[serde(alias = "week")]
+    Agenda,
 }
 
 impl Default for CalendarVariant {
@@ -321,9 +324,10 @@ mod tests {
             assert!(matches!(t.align, TextAlign::Center));
         }
 
-        // Verify Calendar variant
+        // Verify Calendar variant — the fixture uses the legacy "week" value,
+        // which now deserializes to the Agenda variant via its serde alias.
         if let Element::Calendar(c) = &page.elements[0] {
-            assert!(matches!(c.variant, CalendarVariant::Week));
+            assert!(matches!(c.variant, CalendarVariant::Agenda));
             assert_eq!(c.feed_id, "feed-1");
         }
     }
@@ -407,6 +411,24 @@ mod tests {
         let el: Element = serde_json::from_str(json).unwrap();
         if let Element::Calendar(c) = el {
             assert!(matches!(c.variant, CalendarVariant::Today));
+        } else {
+            panic!("expected Calendar element");
+        }
+    }
+
+    #[test]
+    fn calendar_variant_week_alias_maps_to_agenda() {
+        // Older documents stored the agenda variant as "week"; it must still load.
+        let json = r#"{
+            "type": "calendar",
+            "id": "c1",
+            "x": 0.0, "y": 0.0, "w": 200.0, "h": 150.0,
+            "colour": "black",
+            "variant": "week"
+        }"#;
+        let el: Element = serde_json::from_str(json).unwrap();
+        if let Element::Calendar(c) = el {
+            assert!(matches!(c.variant, CalendarVariant::Agenda));
         } else {
             panic!("expected Calendar element");
         }
