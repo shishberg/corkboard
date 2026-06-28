@@ -17,7 +17,7 @@ beforeEach(() => {
 
 describe('widgets', () => {
   it('CalendarWidget agenda shows only days with events, skipping empty ones', () => {
-    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'agenda', x: 0, y: 0, w: 300, h: 400, feedId: '', colour: 'black' }
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'agenda', x: 0, y: 0, w: 300, h: 400, feedId: '', colour: 'black', font: 'atkinson-hyperlegible' }
     const w = mount(CalendarWidget, { props: { el } })
     const days = w.findAll('[data-role="day"]').map((d) => d.text())
     // The sample has no events on Wednesday, so it is skipped.
@@ -26,7 +26,7 @@ describe('widgets', () => {
   })
 
   it('CalendarWidget agenda formats event times as 12-hour and includes all-day items', () => {
-    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'agenda', x: 0, y: 0, w: 300, h: 400, feedId: '', colour: 'black' }
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'agenda', x: 0, y: 0, w: 300, h: 400, feedId: '', colour: 'black', font: 'atkinson-hyperlegible' }
     const w = mount(CalendarWidget, { props: { el } })
     const text = w.get('[data-role="calendar-agenda"]').text()
     expect(text).toContain('Last day of term') // all-day, no time
@@ -35,20 +35,34 @@ describe('widgets', () => {
   })
 
   it('CalendarWidget applies element colour as text colour', () => {
-    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'today', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'blue' }
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'today', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'blue', font: 'atkinson-hyperlegible' }
     const w = mount(CalendarWidget, { props: { el } })
     const style = w.find('[data-role="calendar-root"]').attributes('style') ?? ''
     expect(style).toContain('color: blue')
   })
 
+  it('CalendarWidget applies the element font as font-family', () => {
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'today', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black', font: 'gelasio' }
+    const w = mount(CalendarWidget, { props: { el } })
+    const style = w.find('[data-role="calendar-root"]').attributes('style') ?? ''
+    expect(style).toContain('font-family: gelasio')
+  })
+
+  it('CalendarWidget falls back to the default font when font is empty', () => {
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'today', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black', font: '' }
+    const w = mount(CalendarWidget, { props: { el } })
+    const style = w.find('[data-role="calendar-root"]').attributes('style') ?? ''
+    expect(style).toContain('font-family: atkinson-hyperlegible')
+  })
+
   it('CalendarWidget today variant shows 3 sample events', () => {
-    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'today', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black' }
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'today', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black', font: 'atkinson-hyperlegible' }
     const w = mount(CalendarWidget, { props: { el } })
     expect(w.findAll('[data-role="event"]').length).toBe(3)
   })
 
   it('CalendarWidget date variant shows the formatted sample date', () => {
-    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'date', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black' }
+    const el: CalendarEl = { id: 'cal', type: 'calendar', variant: 'date', x: 0, y: 0, w: 300, h: 200, feedId: '', colour: 'black', font: 'atkinson-hyperlegible' }
     const w = mount(CalendarWidget, { props: { el } })
     const dateEl = w.find('[data-role="calendar-date"]')
     expect(dateEl.exists()).toBe(true)

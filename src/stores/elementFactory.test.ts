@@ -11,6 +11,7 @@ describe('makeElement', () => {
     if (el.type === 'calendar') {
       expect(el.variant).toBe('agenda')
       expect(el.feedId).toBe('family')
+      expect(el.font).toBe('atkinson-hyperlegible')
     }
   })
 

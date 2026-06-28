@@ -93,6 +93,9 @@ pub struct CalendarEl {
     pub variant: CalendarVariant,
     #[serde(default)]
     pub feed_id: String,
+    /// Font id for the calendar's text. Empty falls back to the default face.
+    #[serde(default)]
+    pub font: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

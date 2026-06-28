@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CalendarEl } from '@/stores/types'
+import { useFontsStore } from '@/stores/fonts'
 import { formatSampleDate, SAMPLE_TODAY_EVENTS, sampleAgenda, format12h } from '@/lib/sampleCalendar'
 
 const props = defineProps<{ el: CalendarEl }>()
 
+const fonts = useFontsStore()
 const variant = computed(() => props.el.variant)
+// Older documents may carry no font; fall back to the default so the preview
+// matches the device, which falls back to its default face on an empty id.
+const effectiveFont = computed(() => props.el.font || fonts.defaultId)
 const formattedDate = computed(() => formatSampleDate())
 
 // Date and Today keep the simple min-dimension base size.
@@ -40,7 +45,7 @@ function eventLine(ev: { time: string; title: string }): string {
   <div
     data-role="calendar-root"
     class="h-full w-full overflow-hidden bg-white"
-    :style="{ color: el.colour }"
+    :style="{ color: el.colour, fontFamily: effectiveFont }"
   >
     <!-- Date variant: large centred formatted date -->
     <div

@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePagesStore } from './pages'
-import type { ImageEl, DrawingEl, TextEl, LoadedDoc } from './types'
+import type { ImageEl, DrawingEl, TextEl, CalendarEl, LoadedDoc } from './types'
 
 beforeEach(() => setActivePinia(createPinia()))
 
 function imageEl(id: string): ImageEl {
   return { id, type: 'image', x: 0, y: 0, w: 200, h: 150, colour: 'black', src: '' }
+}
+
+function calendarEl(id: string): CalendarEl {
+  return { id, type: 'calendar', x: 0, y: 0, w: 300, h: 220, colour: 'black', variant: 'today', feedId: '', font: 'atkinson-hyperlegible' }
 }
 
 function textEl(id: string): TextEl {
@@ -272,11 +276,49 @@ describe('usePagesStore', () => {
     expect(el.font).toBe('atkinson-hyperlegible')
   })
 
-  it('setElementFont is a no-op for a non-text element', () => {
+  it('setElementFont sets font on a calendar element', () => {
+    const s = usePagesStore()
+    s.addElement(calendarEl('c1'))
+    s.setElementFont('c1', 'other-font')
+    const el = s.selectedPage?.elements[0] as CalendarEl
+    expect(el.font).toBe('other-font')
+  })
+
+  it('setElementFont is a no-op for an element without text (image)', () => {
     const s = usePagesStore()
     s.addElement(imageEl('i1'))
     // should not throw
     s.setElementFont('i1', 'any-font')
+    expect(s.selectedPage?.elements[0].type).toBe('image')
+  })
+
+  it('setElementVariant sets variant on a calendar element', () => {
+    const s = usePagesStore()
+    s.addElement(calendarEl('c1'))
+    s.setElementVariant('c1', 'agenda')
+    const el = s.selectedPage?.elements[0] as CalendarEl
+    expect(el.variant).toBe('agenda')
+  })
+
+  it('setElementVariant is a no-op for a non-calendar element', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('i1'))
+    s.setElementVariant('i1', 'agenda')
+    expect(s.selectedPage?.elements[0].type).toBe('image')
+  })
+
+  it('setElementFeed sets feedId on a calendar element', () => {
+    const s = usePagesStore()
+    s.addElement(calendarEl('c1'))
+    s.setElementFeed('c1', 'feed-9')
+    const el = s.selectedPage?.elements[0] as CalendarEl
+    expect(el.feedId).toBe('feed-9')
+  })
+
+  it('setElementFeed is a no-op for a non-calendar element', () => {
+    const s = usePagesStore()
+    s.addElement(imageEl('i1'))
+    s.setElementFeed('i1', 'feed-9')
     expect(s.selectedPage?.elements[0].type).toBe('image')
   })
 

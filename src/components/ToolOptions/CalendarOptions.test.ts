@@ -5,6 +5,11 @@ import { nextTick } from 'vue'
 import CalendarOptions from './CalendarOptions.vue'
 import { useFeedsStore } from '@/stores/feeds'
 import { useToolOptionsStore } from '@/stores/toolOptions'
+import { usePagesStore } from '@/stores/pages'
+
+function calendarEl(id: string) {
+  return { id, type: 'calendar' as const, variant: 'today' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible' }
+}
 
 beforeEach(() => {
   localStorage.clear()
@@ -50,5 +55,30 @@ describe('CalendarOptions feed picker', () => {
     mount(CalendarOptions)
     await nextTick()
     expect(opts.feedId).toBe('work')
+  })
+})
+
+describe('CalendarOptions selected-element editing', () => {
+  it('shows and edits the variant of a selected calendar (no "Variant"/"Feed" labels)', async () => {
+    const store = usePagesStore()
+    store.addElement({ ...calendarEl('c1'), variant: 'agenda' })
+    const w = mount(CalendarOptions)
+    await nextTick()
+    expect(w.text()).not.toContain('Feed')
+    // reflects the element's variant
+    expect(w.get('[data-variant="agenda"]').classes().join(' ')).toContain('font-medium')
+    await w.get('[data-variant="date"]').trigger('click')
+    expect((store.selectedPage?.elements[0] as { variant: string }).variant).toBe('date')
+  })
+
+  it('edits the feed of a selected calendar', async () => {
+    const feeds = useFeedsStore()
+    feeds.feeds = [{ id: 'family', name: 'Family' }, { id: 'work', name: 'Work' }]
+    const store = usePagesStore()
+    store.addElement({ ...calendarEl('c1'), feedId: 'family' })
+    const w = mount(CalendarOptions)
+    await nextTick()
+    await w.get('[data-role="feed-select"]').setValue('work')
+    expect((store.selectedPage?.elements[0] as { feedId: string }).feedId).toBe('work')
   })
 })

@@ -1,18 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore, ensureToolOptionsPersistence } from '@/stores/toolOptions'
 import { addImageFromFile } from '@/lib/imageTool'
-import type { ToolId, EpaperColour } from '@/stores/types'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import type { ToolId } from '@/stores/types'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import {
   MousePointer2, Calendar, Pencil, Image as ImageIcon, Trash2, Type,
   BringToFront, SendToBack, PaintBucket,
 } from '@lucide/vue'
-import CalendarOptions from './ToolOptions/CalendarOptions.vue'
-import DrawOptions from './ToolOptions/DrawOptions.vue'
-import TextOptions from './ToolOptions/TextOptions.vue'
 
 const store = usePagesStore()
 const opts = useToolOptionsStore()
@@ -22,7 +18,7 @@ const imageInput = ref<HTMLInputElement | null>(null)
 
 function pickTool(tool: ToolId) {
   // Selecting a tool only makes it active; elements are created by drawing on
-  // the canvas (see EditorCanvas).
+  // the canvas (see EditorCanvas). Tool settings live in the ToolOptionsBar.
   store.setActiveTool(tool)
 }
 
@@ -39,32 +35,6 @@ async function onImageChosen(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   await addImageFromFile(file)
-}
-
-const palette: EpaperColour[] = ['black', 'white', 'red', 'yellow', 'blue', 'green']
-
-const selectedEl = computed(() => {
-  const id = store.selectedElId
-  if (!id) return null
-  return store.selectedPage?.elements.find((e) => e.id === id) ?? null
-})
-
-// With the background tool active the swatches recolour the page background;
-// otherwise they reflect the selected element's colour, else the pen colour.
-const activeColour = computed(() => {
-  if (store.activeTool === 'background') return store.selectedPage?.background ?? 'white'
-  return selectedEl.value?.colour ?? opts.colour
-})
-
-function pickColour(c: EpaperColour) {
-  if (store.activeTool === 'background') {
-    store.setPageBackground(c)
-    return
-  }
-  opts.colour = c
-  if (selectedEl.value) {
-    store.setElementColour(selectedEl.value.id, c)
-  }
 }
 </script>
 
@@ -87,8 +57,8 @@ function pickColour(c: EpaperColour) {
       </Tooltip>
 
       <!-- Calendar -->
-      <Popover>
-        <PopoverTrigger as-child>
+      <Tooltip>
+        <TooltipTrigger as-child>
           <button
             data-tool="calendar"
             class="flex h-9 w-9 items-center justify-center rounded hover:bg-neutral-200"
@@ -97,13 +67,13 @@ function pickColour(c: EpaperColour) {
           >
             <Calendar class="h-5 w-5" />
           </button>
-        </PopoverTrigger>
-        <PopoverContent side="right" class="w-44"><CalendarOptions /></PopoverContent>
-      </Popover>
+        </TooltipTrigger>
+        <TooltipContent side="right">Calendar</TooltipContent>
+      </Tooltip>
 
       <!-- Draw -->
-      <Popover>
-        <PopoverTrigger as-child>
+      <Tooltip>
+        <TooltipTrigger as-child>
           <button
             data-tool="draw"
             class="flex h-9 w-9 items-center justify-center rounded hover:bg-neutral-200"
@@ -112,12 +82,12 @@ function pickColour(c: EpaperColour) {
           >
             <Pencil class="h-5 w-5" :style="{ color: opts.colour }" />
           </button>
-        </PopoverTrigger>
-        <PopoverContent side="right" class="w-48"><DrawOptions /></PopoverContent>
-      </Popover>
+        </TooltipTrigger>
+        <TooltipContent side="right">Draw</TooltipContent>
+      </Tooltip>
 
       <!-- Image: one click opens the file dialog; uploading drops the image
-           straight onto the page (no draw-to-place, no options popover). -->
+           straight onto the page (no draw-to-place). -->
       <Tooltip>
         <TooltipTrigger as-child>
           <button
@@ -140,8 +110,8 @@ function pickColour(c: EpaperColour) {
       />
 
       <!-- Text -->
-      <Popover>
-        <PopoverTrigger as-child>
+      <Tooltip>
+        <TooltipTrigger as-child>
           <button
             data-tool="text"
             class="flex h-9 w-9 items-center justify-center rounded hover:bg-neutral-200"
@@ -150,9 +120,9 @@ function pickColour(c: EpaperColour) {
           >
             <Type class="h-5 w-5" />
           </button>
-        </PopoverTrigger>
-        <PopoverContent side="right" class="w-48"><TextOptions /></PopoverContent>
-      </Popover>
+        </TooltipTrigger>
+        <TooltipContent side="right">Text</TooltipContent>
+      </Tooltip>
 
       <!-- Background: while active, the colour swatches recolour the page -->
       <Tooltip>
@@ -211,19 +181,6 @@ function pickColour(c: EpaperColour) {
         </TooltipTrigger>
         <TooltipContent side="right">Delete selected (Del)</TooltipContent>
       </Tooltip>
-
-      <!-- Colour panel -->
-      <div data-role="colour-panel" class="mt-2 flex flex-col items-center gap-1">
-        <button
-          v-for="c in palette"
-          :key="c"
-          :data-colour="c"
-          class="h-6 w-6 rounded-full border border-neutral-300"
-          :class="activeColour === c ? 'ring-2 ring-blue-500 ring-offset-1' : ''"
-          :style="{ backgroundColor: c }"
-          @click="pickColour(c)"
-        />
-      </div>
     </div>
   </TooltipProvider>
 </template>

@@ -7,7 +7,7 @@ import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore } from '@/stores/toolOptions'
 
 function calendarEl(id: string) {
-  return { id, type: 'calendar' as const, variant: 'agenda' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const }
+  return { id, type: 'calendar' as const, variant: 'agenda' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible' }
 }
 
 beforeEach(() => {
@@ -68,26 +68,11 @@ describe('ToolRail', () => {
     expect(store.activeTool).toBe('background')
   })
 
-  it('with the background tool active, a swatch sets the page background, not an element', async () => {
-    const store = usePagesStore()
-    store.addElement(calendarEl('e1')) // selected
-    const opts = useToolOptionsStore()
-    store.setActiveTool('background')
+  it('the rail no longer holds tool settings or the colour panel', () => {
     const w = mount(ToolRail)
-    await w.get('[data-colour="red"]').trigger('click')
-    expect(store.selectedPage?.background).toBe('red')
-    // the selected element keeps its colour; opts.colour is unchanged too
-    expect(store.selectedPage?.elements[0].colour).toBe('black')
-    expect(opts.colour).not.toBe('red')
-  })
-
-  it('with the background tool active, the panel highlights the page background', async () => {
-    const store = usePagesStore()
-    store.setPageBackground('green')
-    store.setActiveTool('background')
-    const w = mount(ToolRail)
-    await nextTick()
-    expect(w.get('[data-colour="green"]').classes().join(' ')).toContain('ring')
+    expect(w.find('[data-role="colour-panel"]').exists()).toBe(false)
+    expect(w.find('[data-role="feed-select"]').exists()).toBe(false)
+    expect(w.find('[data-pen-size]').exists()).toBe(false)
   })
 
   it('mounting ToolRail wires tool-option persistence to localStorage', async () => {
@@ -99,50 +84,5 @@ describe('ToolRail', () => {
     await nextTick()
     const saved = JSON.parse(localStorage.getItem('corkboard.toolOptions') || '{}')
     expect(saved.calendarVariant).toBe('agenda')
-  })
-
-  it('colour panel renders 6 swatches', async () => {
-    const w = mount(ToolRail)
-    const panel = w.find('[data-role="colour-panel"]')
-    expect(panel.exists()).toBe(true)
-    expect(panel.findAll('[data-colour]').length).toBe(6)
-  })
-
-  it('clicking a swatch with no selection sets opts.colour', async () => {
-    const opts = useToolOptionsStore()
-    const w = mount(ToolRail)
-    await w.get('[data-colour="red"]').trigger('click')
-    expect(opts.colour).toBe('red')
-  })
-
-  it('clicking a swatch with a selection updates element colour and opts.colour', async () => {
-    const store = usePagesStore()
-    store.addElement(calendarEl('e1'))
-    expect(store.selectedElId).toBe('e1')
-    const opts = useToolOptionsStore()
-    const w = mount(ToolRail)
-    await w.get('[data-colour="green"]').trigger('click')
-    expect(opts.colour).toBe('green')
-    expect(store.selectedPage?.elements[0].colour).toBe('green')
-  })
-
-  it('panel highlights the selected element colour when one is selected', async () => {
-    const store = usePagesStore()
-    store.addElement({ ...calendarEl('e1'), colour: 'blue' })
-    const w = mount(ToolRail)
-    await nextTick()
-    // The blue swatch should have the ring class indicating it is highlighted
-    const blueSwatch = w.get('[data-colour="blue"]')
-    expect(blueSwatch.classes().join(' ')).toContain('ring')
-  })
-
-  it('panel highlights opts.colour when no element is selected', async () => {
-    const opts = useToolOptionsStore()
-    opts.colour = 'yellow'
-    expect(usePagesStore().selectedElId).toBe(null)
-    const w = mount(ToolRail)
-    await nextTick()
-    const yellowSwatch = w.get('[data-colour="yellow"]')
-    expect(yellowSwatch.classes().join(' ')).toContain('ring')
   })
 })

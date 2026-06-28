@@ -73,6 +73,7 @@ pub fn render(
 
                 Element::Calendar(el) => {
                     let colour = el.colour.rgb();
+                    let font = faces.get(&el.font);
 
                     match el.variant {
                         CalendarVariant::Date => {
@@ -88,7 +89,7 @@ pub fn render(
                             let date_line_h = date_px * 1.25;
                             text::draw_text(
                                 &mut pixmap,
-                                faces.default(),
+                                font,
                                 &date_str,
                                 el.x, el.y, el.w, date_line_h,
                                 date_px,
@@ -130,7 +131,7 @@ pub fn render(
                                 }
                                 text::draw_text(
                                     &mut pixmap,
-                                    faces.default(),
+                                    font,
                                     line,
                                     el.x, y_pos, el.w, small_line_h,
                                     small_px,
@@ -156,7 +157,7 @@ pub fn render(
                             };
                             draw_agenda(
                                 &mut pixmap,
-                                faces.default(),
+                                font,
                                 feed,
                                 el.x, el.y, el.w, el.h,
                                 colour,
@@ -838,6 +839,7 @@ mod tests {
                 colour: Colour::Black,
                 variant,
                 feed_id: String::new(),
+                font: String::new(),
             })]);
             render(&doc, &cfg, &fonts, &storage, &cal).unwrap()
         };
@@ -849,6 +851,35 @@ mod tests {
         assert_ne!(date_png, today_png, "date and today variants must differ");
         assert_ne!(date_png, agenda_png, "date and agenda variants must differ");
         assert_ne!(today_png, agenda_png, "today and agenda variants must differ");
+    }
+
+    /// A calendar's font changes its rendered text — two different fonts on the
+    /// same element must produce different pixels.
+    #[test]
+    fn calendar_font_changes_output() {
+        let cfg = Config::default();
+        let fonts = Fonts::load();
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(dir.path());
+        let cal = CalendarData::empty();
+
+        let render_font = |font: &str| -> Vec<u8> {
+            let doc = make_doc(vec![Element::Calendar(CalendarEl {
+                id: "c1".to_string(),
+                x: 10.0, y: 10.0, w: 420.0, h: 300.0,
+                colour: Colour::Black,
+                variant: CalendarVariant::Date,
+                feed_id: String::new(),
+                font: font.to_string(),
+            })]);
+            render(&doc, &cfg, &fonts, &storage, &cal).unwrap()
+        };
+
+        assert_ne!(
+            render_font("atkinson-hyperlegible"),
+            render_font("gelasio"),
+            "different calendar fonts must produce different output",
+        );
     }
 
     #[test]
@@ -880,6 +911,7 @@ mod tests {
             colour: Colour::Black,
             variant: CalendarVariant::Agenda,
             feed_id: String::new(),
+                font: String::new(),
         })]);
         let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
         // Non-trivial output (the sample agenda drew some ink).
@@ -902,6 +934,7 @@ mod tests {
             colour: Colour::Black,
             variant: CalendarVariant::Agenda,
             feed_id: "f".to_string(),
+                font: String::new(),
         })]);
         let png = render(&doc, &cfg, &fonts, &storage, &cal).unwrap();
         assert!(!png.is_empty());
@@ -984,6 +1017,7 @@ mod tests {
             colour: Colour::Black,
             variant: CalendarVariant::Today,
             feed_id: String::new(),
+                font: String::new(),
         })]);
         let cfg = Config::default();
         let fonts = Fonts::load();

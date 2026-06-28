@@ -1,10 +1,18 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
-import TextOptions from './TextOptions.vue'
+import FontOptions from './FontOptions.vue'
+import { usePagesStore } from '@/stores/pages'
 import { useToolOptionsStore } from '@/stores/toolOptions'
 import { useFontsStore } from '@/stores/fonts'
 import * as fontsLib from '@/lib/fonts'
+
+function textEl(id: string) {
+  return { id, type: 'text' as const, x: 0, y: 0, w: 240, h: 80, colour: 'black' as const, text: 'Text', font: 'atkinson-hyperlegible', align: 'left' as const }
+}
+function calendarEl(id: string) {
+  return { id, type: 'calendar' as const, variant: 'today' as const, x: 0, y: 0, w: 200, h: 80, feedId: '', colour: 'black' as const, font: 'atkinson-hyperlegible' }
+}
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -17,12 +25,11 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('TextOptions', () => {
-  it('font-select shows the stored font when it exists in the loaded manifest', () => {
+describe('FontOptions', () => {
+  it('font-select shows the stored tool default when no element is selected', () => {
     const opts = useToolOptionsStore()
     opts.font = 'atkinson-hyperlegible'
-
-    const w = mount(TextOptions)
+    const w = mount(FontOptions)
     const select = w.find('[data-role="font-select"]').element as HTMLSelectElement
     expect(select.value).toBe('atkinson-hyperlegible')
   })
@@ -30,14 +37,10 @@ describe('TextOptions', () => {
   it('font-select falls back to the manifest default when the stored font is not loaded', () => {
     const opts = useToolOptionsStore()
     opts.font = 'not-in-manifest'
-
-    // DEFAULT_MANIFEST has atkinson-hyperlegible as default
     const fontsStore = useFontsStore()
     expect(fontsStore.defaultId).toBe('atkinson-hyperlegible')
-
-    const w = mount(TextOptions)
+    const w = mount(FontOptions)
     const select = w.find('[data-role="font-select"]').element as HTMLSelectElement
-    // The select should show the manifest default, not blank
     expect(select.value).toBe('atkinson-hyperlegible')
   })
 
@@ -51,17 +54,31 @@ describe('TextOptions', () => {
       },
     ]
     vi.mocked(fontsLib.loadFontManifest).mockResolvedValue(customManifest)
-
     const opts = useToolOptionsStore()
     opts.font = 'atkinson-hyperlegible' // not in custom manifest
-
-    const w = mount(TextOptions)
-    // Trigger load via the store directly (simulates onMounted completing)
+    const w = mount(FontOptions)
     const fontsStore = useFontsStore()
     await fontsStore.load()
     await w.vm.$nextTick()
-
     const select = w.find('[data-role="font-select"]').element as HTMLSelectElement
     expect(select.value).toBe('custom-font')
+  })
+
+  it('shows the selected text element font and edits it', async () => {
+    const store = usePagesStore()
+    store.addElement({ ...textEl('t1'), font: 'gelasio' })
+    const w = mount(FontOptions)
+    const select = w.find('[data-role="font-select"]').element as HTMLSelectElement
+    expect(select.value).toBe('gelasio')
+    await w.get('[data-role="font-select"]').setValue('carlito')
+    expect((store.selectedPage?.elements[0] as { font: string }).font).toBe('carlito')
+  })
+
+  it('edits the font of a selected calendar element', async () => {
+    const store = usePagesStore()
+    store.addElement(calendarEl('c1'))
+    const w = mount(FontOptions)
+    await w.get('[data-role="font-select"]').setValue('gelasio')
+    expect((store.selectedPage?.elements[0] as { font: string }).font).toBe('gelasio')
   })
 })

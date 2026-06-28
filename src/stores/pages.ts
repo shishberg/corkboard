@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { DocState, LoadedDoc, El, Page, ToolId, BaseEl, EpaperColour, TextEl, ImageEl, Orientation, Size } from './types'
+import type { DocState, LoadedDoc, El, Page, ToolId, BaseEl, EpaperColour, TextEl, CalendarEl, ImageEl, Orientation, Size } from './types'
 import { pageSize } from './types'
 
 let counter = 0
@@ -155,8 +155,21 @@ export const usePagesStore = defineStore('pages', {
     setElementFont(id: string, font: string) {
       const page = this.pages.find((p) => p.id === this.selectedPageId)
       const el = page?.elements.find((e) => e.id === id)
-      if (!el || el.type !== 'text') return
-      ;(el as TextEl).font = font
+      // Font applies to any element that contains text.
+      if (!el || (el.type !== 'text' && el.type !== 'calendar')) return
+      ;(el as TextEl | CalendarEl).font = font
+    },
+    setElementVariant(id: string, variant: CalendarEl['variant']) {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      const el = page?.elements.find((e) => e.id === id)
+      if (!el || el.type !== 'calendar') return
+      ;(el as CalendarEl).variant = variant
+    },
+    setElementFeed(id: string, feedId: string) {
+      const page = this.pages.find((p) => p.id === this.selectedPageId)
+      const el = page?.elements.find((e) => e.id === id)
+      if (!el || el.type !== 'calendar') return
+      ;(el as CalendarEl).feedId = feedId
     },
     setElementAlign(id: string, align: 'left' | 'center') {
       const page = this.pages.find((p) => p.id === this.selectedPageId)
