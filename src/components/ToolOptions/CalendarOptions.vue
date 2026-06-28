@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, computed, watch } from 'vue'
 import { useToolOptionsStore } from '@/stores/toolOptions'
 import { useFeedsStore } from '@/stores/feeds'
 
@@ -11,6 +11,21 @@ const variants = [
   { id: 'today', label: 'Today' },
   { id: 'week', label: 'Week' },
 ] as const
+
+const hasFeeds = computed(() => feeds.feeds.length > 0)
+
+// "(none)" is only an option when there are no feeds. So whenever feeds are
+// available but the current selection isn't one of them (e.g. the default
+// empty value), fall back to the first feed so the picker shows a real choice.
+watch(
+  () => feeds.feeds,
+  (list) => {
+    if (list.length > 0 && !list.some((f) => f.id === opts.feedId)) {
+      opts.feedId = list[0].id
+    }
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   feeds.loadFeeds()
@@ -35,7 +50,7 @@ onMounted(() => {
       :value="opts.feedId"
       @change="opts.feedId = ($event.target as HTMLSelectElement).value"
     >
-      <option value="">(none)</option>
+      <option v-if="!hasFeeds" value="">(none)</option>
       <option v-for="feed in feeds.feeds" :key="feed.id" :value="feed.id">{{ feed.name }}</option>
     </select>
   </div>
