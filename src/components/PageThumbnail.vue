@@ -11,7 +11,13 @@ const store = usePagesStore()
 
 const THUMB_W = 120
 const page = computed(() => store.pages.find((p) => p.id === props.pageId) ?? null)
-const size = computed(() => store.pageSize)
+// Orientation is per-page, so size this thumbnail from its OWN page, not the
+// selected page (store.pageSize follows the selected page).
+const size = computed(() =>
+  (page.value?.orientation ?? 'landscape') === 'portrait'
+    ? { w: 480, h: 800 }
+    : { w: 800, h: 480 },
+)
 const scale = computed(() => THUMB_W / size.value.w)
 
 function onDragStart(e: DragEvent) {
