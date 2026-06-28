@@ -34,11 +34,11 @@ Then read this file fully before doing anything else in this session.
 **Working — editor:**
 - Web UI editor (Vite + Vue 3 + TS + Pinia + Tailwind v4 + shadcn-vue). App shell in `src/App.vue`: TopBar, PageSidebar, ToolRail, EditorCanvas. (Timeline removed in 1a.) Hydrates its document from the device on startup; Publish does `PUT /api/document`.
 - Document state in `usePagesStore` (`src/stores/pages.ts`) — pages, elements, orientation, selection, and `livePageId` (the one page the device displays; defaults to the first page; `setLivePage(id)` guards unknown ids; `livePage` getter is null-safe; `deletePage(id)` reassigns `livePageId`/`selectedPageId` and is a no-op on the last page). This Pinia shape is the draft page-state contract (= the wire `DocState`).
-- Persisted tool options (`src/stores/toolOptions.ts`, localStorage; `load()` whitelists known keys so stale persisted keys are dropped), element factory (`calendar | image | text`), hand-rolled drag/resize (`useDraggableResizable` + `MovableElement`), widgets (Calendar/Image/Text with size-scaled fonts; pen via DrawingLayer/DrawingWidget; `DrawOptions` pen sizes are shown as different-sized circles, not numbers).
-- Element creation is live draw-to-place: picking calendar/image/text only sets the active tool; pressing on the canvas creates the real element immediately and the drag sizes it (a click drops a default size), then the tool auto-switches back to select. Creation tools always create — elements are pointer-events:none unless the select tool is active, so only select selects. Backspace/Delete (or the ToolRail trash button) deletes the selected element.
+- Persisted tool options (`src/stores/toolOptions.ts`, localStorage; `load()` whitelists known keys so stale persisted keys are dropped), element factory (`calendar | image | text`), hand-rolled drag/resize (`useDraggableResizable` + `MovableElement`), widgets (Calendar/Image/Text; Text auto-fits its box via `src/lib/textFit.ts` which measures the real DOM, mirroring the device's `fit_font_size`; pen via DrawingLayer/DrawingWidget; `DrawOptions` pen sizes are shown as different-sized circles, not numbers).
+- Element creation is live draw-to-place for **calendar/text**: picking the tool only sets it active; pressing on the canvas creates the real element immediately and the drag sizes it (a click drops a default size), then the tool auto-switches back to select. Creation tools always create — elements are pointer-events:none unless the select tool is active, so only select selects. **Image is NOT draw-to-place** — it's a one-click action (see Images). Backspace/Delete (or the ToolRail trash button) deletes the selected element.
 - Colour is one global current colour shown as a swatch panel below the tools in `ToolRail` (`colour` in toolOptions; `colour` on every `BaseEl`). It drives calendar/text glyphs and pen ink; selecting an element reflects its colour in the panel and clicking a swatch recolours it (`store.setElementColour`). A **background tool** (`activeTool === 'background'`, paint-bucket icon) reroutes the same swatches to set the current page's background (`Page.background?: EpaperColour`, default white; `store.setPageBackground`); the editor surface and the device renderer both paint it.
 - **Z-order:** `ToolRail` has bring-to-front / send-to-back buttons (next to the trash) acting on the selected element via `store.bringToFront(id?)` / `store.sendToBack(id?)` (move it to the end / start of the page's `elements`; later = drawn on top).
-- **Images:** `ImageOptions` uploads a file via `deviceApi.uploadImage` (`POST /api/images` → `{id}`); the id is stored as the element `src`, kept as a pending `toolOptions.imageId` (session-only, not persisted) for the next placed image, and applied to the selected image element if one is selected. `ImageWidget` shows the image from `deviceApi.imageUrl(id)` = `/api/images/{id}` (so it only renders when served by the device). `store.setElementSrc(id, src)` sets it.
+- **Images:** the ToolRail image button is a one-click action — it opens the file dialog directly, then `src/lib/imageTool.ts` `addImageFromFile` uploads via `deviceApi.uploadImage` (`POST /api/images` → `{id}`), reads the natural size, and drops a **centred, aspect-correct** element (`imagePlacement` in `elementFactory`, scaled to fit half the page), then reactivates select. `ImageWidget` shows the image from `deviceApi.imageUrl(id)` = `/api/images/{id}` and reports its natural size on load so `EditorCanvas` can **lock resize to the image's aspect ratio** (`useDraggableResizable` `aspect` option) and snap the box if needed. (the old ImageOptions component and the `toolOptions.imageId` field were removed.) `store.setElementSrc(id, src)` still sets the src.
 - **TopBar:** Publish promotes the currently-selected page to live (`setLivePage`) then `PUT`s the document (the old per-page "Make live" button in `PageSidebar` is gone; the green Live badge stays). A **Preview** link (`<a href="/preview.png" target="_blank">`) opens the device's rendered PNG in a new tab.
 - Pen uses **perfect-freehand** (`src/lib/freehand.ts` `strokeToPath`): strokes render as filled SVG ink paths (live preview + committed + thumbnail). Raw input points are stored element-local with `natW`/`natH`, so resizing scales the stroke and a tap leaves a dot. Drawings show in page thumbnails.
 - 154 Vitest tests pass (`npm test`); `npm run build` clean. (Browser parity tests: `npm run test:parity`.)
@@ -55,8 +55,13 @@ render time, polls the feed, and re-renders only on semantic content change. **6
   and storage/state log saves, image GC, feed fetches, and refreshes — secret feed URLs are never
   logged, only feed ids/counts),
   `config`, `document` (serde mirror of
-  the editor `DocState`), `storage` (files + image GC), `display` (trait + `WebPreview`), `render`
-  (tiny-skia + ab_glyph; calendar/text/image/drawing → 6-colour quantise), `text`, `sample`
+  the editor `DocState`), `storage` (files + image GC; `gc_images` runs on every `PUT /api/document`
+  so images unreferenced by the saved document are deleted), `display` (trait + `WebPreview`), `render`
+  (tiny-skia + ab_glyph; calendar/text/image/drawing → 6-colour palette via **Floyd–Steinberg
+  dithering** of the final buffer — text/strokes/background are exact palette colours so only images
+  dither; images are Lanczos3-resized and **alpha-composited** so transparent PNGs show the background;
+  text **auto-fits** its box via `text::fit_font_size`, glyphs are grid-fit + stem-darkened for crisp
+  small 1-bit text, calendar text floored at 11px), `text`, `sample`
   (deterministic calendar data, ported from `src/lib/sampleCalendar.ts` — keep the two in sync),
   `fonts` (loads `public/fonts` + embedded Atkinson fallback), `calendar` (hand-rolled ICS parse +
   resolve + semantic `signature`; `parse_ics` reads `RRULE`/`EXDATE` and `resolve` expands recurrence
@@ -67,7 +72,7 @@ render time, polls the feed, and re-renders only on semantic content change. **6
   (feedless) still uses the static Mon–Sun `SAMPLE_WEEK`. The whole week view is slated for a
   rethink), `api`, `state`.
 - Run it: `cd device && CORKBOARD_DIST=../dist CORKBOARD_FONTS=../public/fonts cargo run`
-  (needs `npm run build` first so `../dist` exists). Env: `CORKBOARD_DATA` (default `./data`),
+  (needs `npm run build` first so `../dist` exists). Env: `CORKBOARD_DATA` (default `device/data`),
   `CORKBOARD_PORT` (8080), `CORKBOARD_DIST`, `CORKBOARD_FONTS`.
 - Editor↔device sync (1e): the editor hydrates from `GET /api/document` on startup and Publish
   does `PUT /api/document`; `src/lib/deviceApi.ts` has the tolerant client (`getDocument`,
