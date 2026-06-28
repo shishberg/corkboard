@@ -13,12 +13,15 @@ edges:
     condition: when specific technology versions or library details are needed
   - target: context/architecture.md
     condition: when understanding how components connect during setup
-last_updated: 2026-06-27
+last_updated: 2026-06-28
 ---
 
 # Setup
 
-The frontend web UI is the only buildable thing so far (frontend-only; no device server yet).
+Two buildable parts: the **Vue editor** (`src/`) and the **Rust device server** (`device/`).
+The device server is the single source of truth — it serves the built editor + JSON API +
+`preview.png` on one LAN origin, and renders the live page to a 6-colour PNG. The only unbuilt
+piece is the `Panel` SPI driver (needs hardware); a `WebPreview` display stands in for the panel.
 
 ## Prerequisites
 - Node.js — Node 25 is in use here. Note: Node 25 ships a broken built-in `localStorage` (its `clear`/`setItem` are undefined without `--localstorage-file`); tests work around this with a jsdom shim in `src/test-setup.ts`.
@@ -26,16 +29,25 @@ The frontend web UI is the only buildable thing so far (frontend-only; no device
 
 ## First-time Setup
 - `npm install`
-- `npm run dev` — start the Vite dev server.
+- Editor only: `npm run dev` — start the Vite dev server.
+- Full stack: `npm run build` first (so `dist/` exists), then
+  `cd device && CORKBOARD_DIST=../dist CORKBOARD_FONTS=../public/fonts cargo run`.
+  Open the device origin (default `http://localhost:8080`); `/preview.png` is the rendered panel.
 
 ## Environment Variables
-None. The web UI is frontend-only; there's no device host to point at yet. (A device address will likely appear once the page-state contract exists.)
+Device server only (the editor itself needs none — it talks to the device on the same origin):
+- `CORKBOARD_DATA` — document, images, config (default `device/data`).
+- `CORKBOARD_PORT` — HTTP port (default `8080`).
+- `CORKBOARD_DIST` — path to the built editor (`../dist`).
+- `CORKBOARD_FONTS` — path to bundled fonts (`../public/fonts`).
 
 ## Common Commands
 - `npm run dev` — Vite dev server.
 - `npm run build` — type-check (`vue-tsc -b`) + production build.
 - `npm test` — run the Vitest suite once.
 - `npm run test:watch` — Vitest in watch mode.
+- `npm run test:parity` — Playwright editor↔preview parity tests.
+- `cargo test` (in `device/`) — device server tests.
 
 ## Common Issues
 - **`@vueuse/core` build warnings** (`#__PURE__` / `INVALID_ANNOTATION`) — upstream noise from a `reka-ui` transitive dep, not our code; harmless.
