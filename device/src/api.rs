@@ -191,6 +191,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn put_document_garbage_collects_orphan_images() {
+        use crate::document::{Colour, Element, ImageEl, Orientation, Page};
+        let state = make_state();
+        let app = make_router(state.clone());
+
+        // Two stored images; the document references only one.
+        state.storage.save_image("keep", b"keep").unwrap();
+        state.storage.save_image("orphan", b"orphan").unwrap();
+
+        let page_id = "p1".to_string();
+        let doc = Document {
+            orientation: Orientation::Landscape,
+            live_page_id: Some(page_id.clone()),
+            pages: vec![Page {
+                id: page_id,
+                name: "P".to_string(),
+                elements: vec![Element::Image(ImageEl {
+                    id: "e1".to_string(),
+                    x: 0.0, y: 0.0, w: 10.0, h: 10.0,
+                    colour: Colour::White,
+                    src: Some("keep".to_string()),
+                })],
+                background: None,
+            }],
+        };
+
+        let put_req = Request::builder()
+            .method("PUT")
+            .uri("/api/document")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(serde_json::to_string(&doc).unwrap()))
+            .unwrap();
+        let resp = app.oneshot(put_req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        assert!(state.storage.image_path("keep").exists(), "referenced image kept");
+        assert!(
+            !state.storage.image_path("orphan").exists(),
+            "unreferenced image should be garbage-collected on PUT"
+        );
+    }
+
+    #[tokio::test]
     async fn put_then_get_document_and_preview() {
         let state = make_state();
         let app = make_router(state.clone());
