@@ -5,6 +5,12 @@ pub enum Orientation {
     Portrait,
 }
 
+impl Default for Orientation {
+    fn default() -> Self {
+        Orientation::Landscape
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Colour {
@@ -151,12 +157,19 @@ pub struct Page {
     /// the renderer treats `None` as white.
     #[serde(default)]
     pub background: Option<Colour>,
+    /// Per-page orientation. Absent in documents that predate per-page
+    /// orientation; the document-level `orientation` is used as a fallback.
+    #[serde(default)]
+    pub orientation: Option<Orientation>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Document {
-    pub orientation: Orientation,
+    /// Legacy document-level orientation. Newer documents set orientation
+    /// per-page; this is kept only as a fallback for older saved documents.
+    #[serde(default)]
+    pub orientation: Option<Orientation>,
     pub pages: Vec<Page>,
     pub live_page_id: Option<String>,
 }
@@ -165,12 +178,13 @@ impl Document {
     pub fn default() -> Self {
         let page_id = uuid::Uuid::new_v4().to_string();
         Document {
-            orientation: Orientation::Landscape,
+            orientation: None,
             pages: vec![Page {
                 id: page_id.clone(),
                 name: "Page 1".to_string(),
                 elements: vec![],
                 background: None,
+                orientation: Some(Orientation::Landscape),
             }],
             live_page_id: Some(page_id),
         }
@@ -181,8 +195,18 @@ impl Document {
         self.pages.iter().find(|p| p.id == id)
     }
 
+    /// Orientation of the page currently being displayed. Falls back to the
+    /// legacy document-level orientation, then landscape.
+    pub fn live_orientation(&self) -> Orientation {
+        self.live_page()
+            .and_then(|p| p.orientation.clone())
+            .or_else(|| self.orientation.clone())
+            .unwrap_or_default()
+    }
+
+    /// Pixel size of the live page's canvas.
     pub fn orientation_size(&self) -> (u32, u32) {
-        match self.orientation {
+        match self.live_orientation() {
             Orientation::Landscape => (800, 480),
             Orientation::Portrait => (480, 800),
         }
@@ -322,12 +346,36 @@ mod tests {
     }
 
     #[test]
-    fn orientation_size() {
+    fn orientation_size_follows_live_page() {
         let mut doc = Document::default();
-        doc.orientation = Orientation::Landscape;
+        doc.pages[0].orientation = Some(Orientation::Landscape);
         assert_eq!(doc.orientation_size(), (800, 480));
 
-        doc.orientation = Orientation::Portrait;
+        doc.pages[0].orientation = Some(Orientation::Portrait);
+        assert_eq!(doc.orientation_size(), (480, 800));
+    }
+
+    #[test]
+    fn orientation_falls_back_to_document_level() {
+        // Legacy document: orientation only at the document level, page has none.
+        let json = r#"{
+            "orientation": "portrait",
+            "pages": [{ "id": "p1", "name": "P", "elements": [] }],
+            "livePageId": "p1"
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
+        assert!(doc.pages[0].orientation.is_none());
+        assert_eq!(doc.orientation_size(), (480, 800));
+    }
+
+    #[test]
+    fn per_page_orientation_overrides_document_level() {
+        let json = r#"{
+            "orientation": "landscape",
+            "pages": [{ "id": "p1", "name": "P", "elements": [], "orientation": "portrait" }],
+            "livePageId": "p1"
+        }"#;
+        let doc: Document = serde_json::from_str(json).unwrap();
         assert_eq!(doc.orientation_size(), (480, 800));
     }
 

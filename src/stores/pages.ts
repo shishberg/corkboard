@@ -1,18 +1,17 @@
 import { defineStore } from 'pinia'
-import type { DocState, El, Page, ToolId, BaseEl, EpaperColour, TextEl, ImageEl } from './types'
+import type { DocState, LoadedDoc, El, Page, ToolId, BaseEl, EpaperColour, TextEl, ImageEl, Orientation } from './types'
 
 let counter = 0
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
-function blankPage(): Page {
-  return { id: uid('page'), name: 'Page', elements: [], background: 'white' }
+function blankPage(orientation: Orientation = 'landscape'): Page {
+  return { id: uid('page'), name: 'Page', elements: [], background: 'white', orientation }
 }
 
 export const usePagesStore = defineStore('pages', {
   state: (): DocState => {
     const first = blankPage()
     return {
-      orientation: 'landscape',
       pages: [first],
       livePageId: first.id,
       selectedPageId: first.id,
@@ -28,14 +27,19 @@ export const usePagesStore = defineStore('pages', {
     livePage(state): Page | null {
       return state.pages.find((p) => p.id === state.livePageId) ?? null
     },
-    pageSize(state): { w: number; h: number } {
-      return state.orientation === 'landscape' ? { w: 800, h: 480 } : { w: 480, h: 800 }
+    // Canvas size for the page being edited. Orientation is per-page now, so
+    // this follows the selected page (defaulting to landscape if none).
+    pageSize(): { w: number; h: number } {
+      const o = this.selectedPage?.orientation ?? 'landscape'
+      return o === 'landscape' ? { w: 800, h: 480 } : { w: 480, h: 800 }
     },
   },
 
   actions: {
     addPage(): string {
-      const page = blankPage()
+      // Inherit the orientation of the page you're on, so adding to a portrait
+      // board keeps it portrait.
+      const page = blankPage(this.selectedPage?.orientation ?? 'landscape')
       page.name = `Page ${this.pages.length + 1}`
       this.pages.push(page)
       this.selectedPageId = page.id
@@ -48,7 +52,9 @@ export const usePagesStore = defineStore('pages', {
       this.selectedElId = null
     },
     toggleOrientation() {
-      this.orientation = this.orientation === 'landscape' ? 'portrait' : 'landscape'
+      const page = this.selectedPage
+      if (!page) return
+      page.orientation = page.orientation === 'landscape' ? 'portrait' : 'landscape'
     },
     setActiveTool(t: ToolId) {
       this.activeTool = t
@@ -157,11 +163,16 @@ export const usePagesStore = defineStore('pages', {
       if (!el || el.type !== 'text') return
       ;(el as TextEl).align = align
     },
-    hydrate(doc: DocState) {
+    hydrate(doc: LoadedDoc) {
       if (!doc.pages || doc.pages.length === 0) return
-      this.orientation = doc.orientation
-      // Older documents predate per-page backgrounds; default them to white.
-      this.pages = doc.pages.map((p) => ({ ...p, background: p.background ?? 'white' }))
+      // Older documents kept orientation at the document level; carry it onto
+      // any page that lacks its own. Also default backgrounds (also once global).
+      const legacyOrientation = doc.orientation ?? 'landscape'
+      this.pages = doc.pages.map((p) => ({
+        ...p,
+        background: p.background ?? 'white',
+        orientation: p.orientation ?? legacyOrientation,
+      }))
       this.activeTool = doc.activeTool
       this.selectedElId = doc.selectedElId
       const pageIds = new Set(doc.pages.map((p) => p.id))

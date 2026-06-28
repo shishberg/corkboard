@@ -52,8 +52,7 @@ describe('refreshNow', () => {
 
 describe('getDocument', () => {
   const doc: DocState = {
-    orientation: 'landscape',
-    pages: [{ id: 'p1', name: 'Page', elements: [] }],
+    pages: [{ id: 'p1', name: 'Page', elements: [], orientation: 'landscape' }],
     livePageId: 'p1',
     selectedPageId: 'p1',
     selectedElId: null,
@@ -83,8 +82,7 @@ describe('getDocument', () => {
 
 describe('putDocument', () => {
   const doc: DocState = {
-    orientation: 'portrait',
-    pages: [{ id: 'p1', name: 'Page', elements: [] }],
+    pages: [{ id: 'p1', name: 'Page', elements: [], orientation: 'portrait' }],
     livePageId: 'p1',
     selectedPageId: 'p1',
     selectedElId: null,

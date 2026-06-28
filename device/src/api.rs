@@ -192,7 +192,7 @@ mod tests {
 
     #[tokio::test]
     async fn put_document_garbage_collects_orphan_images() {
-        use crate::document::{Colour, Element, ImageEl, Orientation, Page};
+        use crate::document::{Colour, Element, ImageEl, Page};
         let state = make_state();
         let app = make_router(state.clone());
 
@@ -202,7 +202,7 @@ mod tests {
 
         let page_id = "p1".to_string();
         let doc = Document {
-            orientation: Orientation::Landscape,
+            orientation: None,
             live_page_id: Some(page_id.clone()),
             pages: vec![Page {
                 id: page_id,
@@ -214,6 +214,7 @@ mod tests {
                     src: Some("keep".to_string()),
                 })],
                 background: None,
+                orientation: None,
             }],
         };
 

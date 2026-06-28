@@ -470,13 +470,14 @@ mod tests {
     fn make_doc(elements: Vec<Element>) -> Document {
         let page_id = "page-1".to_string();
         Document {
-            orientation: Orientation::Landscape,
+            orientation: None,
             live_page_id: Some(page_id.clone()),
             pages: vec![Page {
                 id: page_id,
                 name: "Test".to_string(),
                 elements,
                 background: None,
+                orientation: Some(Orientation::Landscape),
             }],
         }
     }
@@ -504,7 +505,7 @@ mod tests {
     #[test]
     fn render_portrait_size() {
         let mut doc = make_doc(vec![]);
-        doc.orientation = Orientation::Portrait;
+        doc.pages[0].orientation = Some(Orientation::Portrait);
         let cfg = Config::default();
         let fonts = Fonts::load();
         let dir = tempfile::tempdir().unwrap();

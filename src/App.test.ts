@@ -41,9 +41,9 @@ describe('App integration', () => {
     // After creation, tool automatically switches back to select
     expect(store.activeTool).toBe('select')
 
-    expect(store.orientation).toBe('landscape')
+    expect(store.selectedPage?.orientation).toBe('landscape')
     await w.get('[data-role="orientation"]').trigger('click')
-    expect(store.orientation).toBe('portrait')
+    expect(store.selectedPage?.orientation).toBe('portrait')
     w.unmount()
   })
 

@@ -159,7 +159,7 @@ mod tests {
         // Build a document that references only "img-keep"
         let page_id = "page-1".to_string();
         let doc = Document {
-            orientation: crate::document::Orientation::Landscape,
+            orientation: None,
             live_page_id: Some(page_id.clone()),
             pages: vec![Page {
                 id: page_id,
@@ -174,6 +174,7 @@ mod tests {
                     src: Some("img-keep".to_string()),
                 })],
                 background: None,
+                orientation: None,
             }],
         };
 

@@ -12,13 +12,20 @@ export interface Stroke { colour: EpaperColour; size: number; points: { x: numbe
 
 export type El = CalendarEl | ImageEl | DrawingEl | TextEl
 
-export interface Page { id: string; name: string; elements: El[]; background?: EpaperColour }
+export interface Page { id: string; name: string; elements: El[]; background?: EpaperColour; orientation: Orientation }
 
 export interface DocState {
-  orientation: Orientation
   pages: Page[]
   livePageId: string | null
   selectedPageId: string | null
   selectedElId: string | null
   activeTool: ToolId
+}
+
+// Shape accepted when loading a saved document. Covers current documents plus
+// older ones that kept `orientation` at the document level and had pages
+// without their own `orientation`. `hydrate` migrates these onto each page.
+export type LoadedDoc = Omit<DocState, 'pages'> & {
+  orientation?: Orientation
+  pages: (Omit<Page, 'orientation'> & { orientation?: Orientation })[]
 }

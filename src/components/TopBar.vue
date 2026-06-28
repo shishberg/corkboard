@@ -34,8 +34,8 @@ async function publish() {
         class="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-neutral-100"
         @click="store.toggleOrientation()"
       >
-        <component :is="store.orientation === 'landscape' ? RectangleHorizontal : RectangleVertical" class="h-4 w-4" />
-        {{ store.orientation }}
+        <component :is="(store.selectedPage?.orientation ?? 'landscape') === 'landscape' ? RectangleHorizontal : RectangleVertical" class="h-4 w-4" />
+        {{ store.selectedPage?.orientation ?? 'landscape' }}
       </button>
       <Button data-role="preview" as="a" href="/preview.png" target="_blank" rel="noopener" variant="outline" size="sm">Preview</Button>
       <Button data-role="publish" size="sm" @click="publish">Publish</Button>

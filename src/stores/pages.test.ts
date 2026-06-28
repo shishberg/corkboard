@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePagesStore } from './pages'
-import type { ImageEl, DrawingEl, TextEl, DocState } from './types'
+import type { ImageEl, DrawingEl, TextEl, LoadedDoc } from './types'
 
 beforeEach(() => setActivePinia(createPinia()))
 
@@ -27,13 +27,24 @@ describe('usePagesStore', () => {
     expect(s.selectedPageId).toBe(id)
   })
 
-  it('toggleOrientation flips orientation and pageSize', () => {
+  it('toggleOrientation flips the selected page orientation and pageSize', () => {
     const s = usePagesStore()
-    expect(s.orientation).toBe('landscape')
+    expect(s.selectedPage?.orientation).toBe('landscape')
     expect(s.pageSize).toEqual({ w: 800, h: 480 })
     s.toggleOrientation()
-    expect(s.orientation).toBe('portrait')
+    expect(s.selectedPage?.orientation).toBe('portrait')
     expect(s.pageSize).toEqual({ w: 480, h: 800 })
+  })
+
+  it('orientation is per-page, not global', () => {
+    const s = usePagesStore()
+    const first = s.selectedPageId!
+    s.toggleOrientation() // first page -> portrait
+    s.addPage() // inherits portrait
+    expect(s.selectedPage?.orientation).toBe('portrait')
+    s.toggleOrientation() // second page -> landscape, first stays portrait
+    expect(s.selectedPage?.orientation).toBe('landscape')
+    expect(s.pages.find((p) => p.id === first)?.orientation).toBe('portrait')
   })
 
   it('addElement pushes onto the selected page and selects it', () => {
@@ -159,7 +170,7 @@ describe('usePagesStore', () => {
 
   it('hydrate defaults a missing page background to white', () => {
     const s = usePagesStore()
-    const doc: DocState = {
+    const doc: LoadedDoc = {
       orientation: 'landscape',
       pages: [{ id: 'p1', name: 'Page', elements: [] }],
       livePageId: 'p1',
@@ -169,6 +180,26 @@ describe('usePagesStore', () => {
     }
     s.hydrate(doc)
     expect(s.selectedPage?.background).toBe('white')
+  })
+
+  it('hydrate migrates a legacy document-level orientation onto each page', () => {
+    const s = usePagesStore()
+    const legacy: LoadedDoc = {
+      orientation: 'portrait',
+      pages: [
+        { id: 'p1', name: 'A', elements: [] },
+        { id: 'p2', name: 'B', elements: [], orientation: 'landscape' },
+      ],
+      livePageId: 'p1',
+      selectedPageId: 'p1',
+      selectedElId: null,
+      activeTool: 'select',
+    }
+    s.hydrate(legacy)
+    // Page without its own orientation inherits the document-level one...
+    expect(s.pages.find((p) => p.id === 'p1')?.orientation).toBe('portrait')
+    // ...while a page that already has one keeps it.
+    expect(s.pages.find((p) => p.id === 'p2')?.orientation).toBe('landscape')
   })
 
   it('bringToFront moves the element to the end of the array (drawn last = on top)', () => {
@@ -343,7 +374,7 @@ describe('usePagesStore', () => {
   describe('hydrate', () => {
     it('replaces pages and livePageId from a loaded doc', () => {
       const s = usePagesStore()
-      const loaded: DocState = {
+      const loaded: LoadedDoc = {
         orientation: 'portrait',
         pages: [{ id: 'loaded-p1', name: 'Loaded', elements: [] }],
         livePageId: 'loaded-p1',
@@ -355,14 +386,14 @@ describe('usePagesStore', () => {
       expect(s.pages.length).toBe(1)
       expect(s.pages[0].id).toBe('loaded-p1')
       expect(s.livePageId).toBe('loaded-p1')
-      expect(s.orientation).toBe('portrait')
+      expect(s.pages[0].orientation).toBe('portrait')
       expect(s.activeTool).toBe('draw')
     })
 
     it('is a no-op when doc.pages is empty', () => {
       const s = usePagesStore()
       const originalPageId = s.pages[0].id
-      const empty: DocState = {
+      const empty: LoadedDoc = {
         orientation: 'portrait',
         pages: [],
         livePageId: null,
@@ -377,7 +408,7 @@ describe('usePagesStore', () => {
 
     it('fixes a dangling selectedPageId to the first page', () => {
       const s = usePagesStore()
-      const loaded: DocState = {
+      const loaded: LoadedDoc = {
         orientation: 'landscape',
         pages: [{ id: 'real-p1', name: 'Page', elements: [] }],
         livePageId: 'real-p1',
