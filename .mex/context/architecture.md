@@ -47,11 +47,11 @@ lives in `context/protocol.md`.** Hardware constraints live in `context/hardware
   format. Shape + round-two changes are in `context/protocol.md`.
 
 ## External Dependencies
-- **The noticeboard device** — Orange Pi Zero 2W driving a Waveshare 7.3" E6 panel (800×480,
+- *The noticeboard device* — Orange Pi Zero 2W driving a Waveshare 7.3" E6 panel (800×480,
   6-colour). Full specs: `context/hardware.md`.
-- **On-device storage** — plain files: `document.json`, an `images/` dir (GC unreferenced on
+- *On-device storage* — plain files: `document.json`, an `images/` dir (GC unreferenced on
   publish), and `config.json` for device config + secrets. No database.
-- **Google Calendar (secret iCal feed)** — the first device→internet dependency. The device
+- *Google Calendar (secret iCal feed)* — the first device→internet dependency. The device
   fetches an ICS URL over HTTPS and resolves events at render time. The secret URL lives in
   `config.json`, never in the document or git.
 
