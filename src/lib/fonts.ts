@@ -11,6 +11,21 @@ export const DEFAULT_MANIFEST: FontDef[] = [
       { weight: 700, style: 'normal', file: 'atkinson-hyperlegible/Bold.ttf' },
     ],
   },
+  {
+    id: 'dejavu-sans',
+    name: 'DejaVu Sans',
+    faces: [{ weight: 400, style: 'normal', file: 'dejavu-sans/DejaVuSans.ttf' }],
+  },
+  {
+    id: 'carlito',
+    name: 'Carlito',
+    faces: [{ weight: 400, style: 'normal', file: 'carlito/Carlito-Regular.ttf' }],
+  },
+  {
+    id: 'gelasio',
+    name: 'Gelasio',
+    faces: [{ weight: 400, style: 'normal', file: 'gelasio/Gelasio.ttf' }],
+  },
 ]
 
 /** GET /fonts/manifest.json; returns parsed fonts array on success, DEFAULT_MANIFEST on any failure. */
