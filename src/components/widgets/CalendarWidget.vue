@@ -44,7 +44,7 @@ function eventLine(ev: { time: string; title: string }): string {
 <template>
   <div
     data-role="calendar-root"
-    class="h-full w-full overflow-hidden bg-white"
+    class="h-full w-full overflow-hidden"
     :style="{ color: el.colour, fontFamily: effectiveFont }"
   >
     <!-- Date variant: large centred formatted date -->
