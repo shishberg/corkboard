@@ -25,6 +25,9 @@ dist-ssr
 .serena/
 device/target/
 device/data/
+# Holds the device's runtime state incl. config.json with the secret iCal URL —
+# never commit it (listed explicitly even though device/data/ already covers it).
+device/data/config.json
 
 # Playwright
 test-results/
