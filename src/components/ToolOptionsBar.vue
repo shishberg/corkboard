@@ -11,26 +11,24 @@ import ColourSwatches from './ToolOptions/ColourSwatches.vue'
 // A settings panel and the contexts it applies to. A panel shows when the
 // active tool is in `tools` OR the selected element's type is in `elementTypes`
 // — so the same wiring drives "settings for the current tool" and "settings for
-// the selected element". `align: 'end'` pushes a panel to the right of the bar.
+// the selected element". Panels render left-to-right in this order.
 interface PanelDef {
   component: Component
   tools: ToolId[]
   elementTypes: El['type'][]
-  align?: 'end'
 }
 
 const panels: PanelDef[] = [
+  {
+    component: ColourSwatches,
+    tools: ['draw', 'calendar', 'text', 'background'],
+    elementTypes: ['calendar', 'text', 'drawing'],
+  },
   { component: CalendarOptions, tools: ['calendar'], elementTypes: ['calendar'] },
   { component: FontOptions, tools: ['calendar', 'text'], elementTypes: ['calendar', 'text'] },
   { component: AlignOptions, tools: ['text'], elementTypes: ['text'] },
   // Pen size has no per-element edit: a placed drawing has per-stroke sizes.
   { component: DrawOptions, tools: ['draw'], elementTypes: [] },
-  {
-    component: ColourSwatches,
-    tools: ['draw', 'calendar', 'text', 'background'],
-    elementTypes: ['calendar', 'text', 'drawing'],
-    align: 'end',
-  },
 ]
 
 const store = usePagesStore()
@@ -59,7 +57,6 @@ const visiblePanels = computed(() =>
       :is="panel.component"
       v-for="(panel, i) in visiblePanels"
       :key="i"
-      :class="panel.align === 'end' ? 'ml-auto' : ''"
     />
   </div>
 </template>
