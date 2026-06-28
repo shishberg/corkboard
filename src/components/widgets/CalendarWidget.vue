@@ -20,7 +20,9 @@ const formattedDate = computed(() => formatSampleDate())
 const datePx = ref(10)
 function recomputeDateFit() {
   if (variant.value !== 'date') return
-  datePx.value = fitFontSize(formattedDate.value, props.el.w, props.el.h, effectiveFont.value)
+  // The date renders bold (font-bold below); measure bold so the fitted size
+  // matches the device, which now sizes and draws the date with its bold face.
+  datePx.value = fitFontSize(formattedDate.value, props.el.w, props.el.h, effectiveFont.value, 10, 240, 700)
 }
 watch(
   () => [variant.value, props.el.w, props.el.h, effectiveFont.value, formattedDate.value] as const,

@@ -15,6 +15,7 @@ export function fitFontSize(
   font: string,
   minPx = 10,
   maxPx = 240,
+  fontWeight: number | string = 'normal',
 ): number {
   if (!text.trim() || w <= 0 || h <= 0) return minPx
   if (typeof document === 'undefined') return minPx
@@ -27,6 +28,7 @@ export function fitFontSize(
     top: '0',
     width: `${w}px`,
     fontFamily: font,
+    fontWeight: String(fontWeight),
     lineHeight: String(LINE_HEIGHT),
     whiteSpace: 'pre-wrap',
     overflowWrap: 'normal',

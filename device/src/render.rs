@@ -85,17 +85,20 @@ pub fn render(
                                 sample::format_sample_date(sample::SAMPLE_TODAY)
                             };
 
+                            // The date is bold (the editor's CalendarWidget shows
+                            // it font-bold); use the bold face so the panel matches.
+                            let date_font = faces.heading(&el.font);
                             // Auto-size the date to fill its box, exactly like a
                             // text element, so it isn't perpetually tiny. The
                             // editor's CalendarWidget mirrors this fit.
-                            let date_px = text::fit_font_size(font, &date_str, el.w, el.h, 10.0, 240.0);
+                            let date_px = text::fit_font_size(date_font, &date_str, el.w, el.h, 10.0, 240.0);
                             let date_align = match el.align {
                                 TextAlign::Left => text::Align::Left,
                                 TextAlign::Center => text::Align::Center,
                             };
                             text::draw_text(
                                 &mut pixmap,
-                                font,
+                                date_font,
                                 &date_str,
                                 el.x, el.y, el.w, el.h,
                                 date_px,
