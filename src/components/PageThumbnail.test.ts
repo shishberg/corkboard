@@ -7,6 +7,15 @@ import { makeDrawingElement } from '@/stores/elementFactory'
 
 beforeEach(() => setActivePinia(createPinia()))
 
+function visualSize(el: HTMLElement): { width: number; height: number } {
+  const m = el.style.transform.match(/scale\(([\d.]+)\)/)
+  const scale = m ? parseFloat(m[1]) : 1
+  return {
+    width: parseFloat(el.style.width) * scale,
+    height: parseFloat(el.style.height) * scale,
+  }
+}
+
 describe('PageThumbnail', () => {
   it('renders a drawing element as an svg with data-role="drawing"', () => {
     const store = usePagesStore()
@@ -17,22 +26,44 @@ describe('PageThumbnail', () => {
     expect(w.find('[data-role="drawing"]').exists()).toBe(true)
   })
 
-  it("sizes each thumbnail from its own page's orientation, not the selected page", () => {
+  it("uses a fixed 120×120 outer box for each thumbnail's own orientation", () => {
     const store = usePagesStore()
-    // Page 1 (landscape, the default) is selected.
     const landscapeId = store.selectedPageId!
-    // Add a second page and make it portrait.
     const portraitId = store.addPage()
     store.toggleOrientation()
-    // Re-select the landscape page so it's the "active" one.
     store.selectPage(landscapeId)
 
-    // THUMB_W is 120. Landscape (800×480) → height 120 * 480/800 = 72.
-    // Portrait (480×800) → height 120 * 800/480 = 200.
     const landscape = mount(PageThumbnail, { props: { pageId: landscapeId } })
     const portrait = mount(PageThumbnail, { props: { pageId: portraitId } })
 
-    expect((landscape.element as HTMLElement).style.height).toBe('72px')
-    expect((portrait.element as HTMLElement).style.height).toBe('200px')
+    const landscapeOuter = landscape.element as HTMLElement
+    const portraitOuter = portrait.element as HTMLElement
+    expect(landscapeOuter.style.width).toBe('120px')
+    expect(landscapeOuter.style.height).toBe('120px')
+    expect(portraitOuter.style.width).toBe('120px')
+    expect(portraitOuter.style.height).toBe('120px')
+
+    const landscapeInner = landscape.find('[data-role="thumbnail-inner"]').element as HTMLElement
+    const portraitInner = portrait.find('[data-role="thumbnail-inner"]').element as HTMLElement
+    expect(visualSize(landscapeInner)).toEqual({ width: 120, height: 72 })
+    expect(visualSize(portraitInner)).toEqual({ width: 72, height: 120 })
+  })
+
+  it('centers the scaled content inside the 120×120 box', () => {
+    const store = usePagesStore()
+    const landscapeId = store.selectedPageId!
+    const portraitId = store.addPage()
+    store.toggleOrientation()
+    store.selectPage(landscapeId)
+
+    const landscape = mount(PageThumbnail, { props: { pageId: landscapeId } })
+    const portrait = mount(PageThumbnail, { props: { pageId: portraitId } })
+
+    const landscapeInner = landscape.find('[data-role="thumbnail-inner"]').element as HTMLElement
+    const portraitInner = portrait.find('[data-role="thumbnail-inner"]').element as HTMLElement
+    expect(landscapeInner.style.top).toBe('24px')
+    expect(landscapeInner.style.left).toBe('0px')
+    expect(portraitInner.style.top).toBe('0px')
+    expect(portraitInner.style.left).toBe('24px')
   })
 })

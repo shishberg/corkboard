@@ -15,7 +15,9 @@ const page = computed(() => store.pages.find((p) => p.id === props.pageId) ?? nu
 // Size from this thumbnail's OWN page, not the selected page (store.pageSize
 // follows the selected page).
 const size = computed(() => pageSize(page.value))
-const scale = computed(() => THUMB_W / size.value.w)
+const scale = computed(() => Math.min(THUMB_W / size.value.w, THUMB_W / size.value.h))
+const offsetX = computed(() => (THUMB_W - size.value.w * scale.value) / 2)
+const offsetY = computed(() => (THUMB_W - size.value.h * scale.value) / 2)
 
 function onDragStart(e: DragEvent) {
   e.dataTransfer?.setData('text/plain', props.pageId)
@@ -25,13 +27,21 @@ function onDragStart(e: DragEvent) {
 <template>
   <div
     class="relative overflow-hidden border bg-white"
-    :style="{ width: `${THUMB_W}px`, height: `${size.h * scale}px` }"
+    :style="{ width: `${THUMB_W}px`, height: `${THUMB_W}px` }"
+    data-role="thumbnail"
     draggable="true"
     @dragstart="onDragStart"
   >
     <div
-      class="absolute left-0 top-0 origin-top-left"
-      :style="{ width: `${size.w}px`, height: `${size.h}px`, transform: `scale(${scale})` }"
+      class="absolute origin-top-left"
+      :style="{
+        width: `${size.w}px`,
+        height: `${size.h}px`,
+        top: `${offsetY}px`,
+        left: `${offsetX}px`,
+        transform: `scale(${scale})`,
+      }"
+      data-role="thumbnail-inner"
     >
       <div
         v-for="el in page?.elements ?? []"
