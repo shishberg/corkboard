@@ -27,12 +27,23 @@ function onDragStart(e: DragEvent) {
 
 <template>
   <div
-    class="relative overflow-hidden border bg-white"
+    class="relative overflow-hidden"
     :style="{ width: `${THUMB_W}px`, height: `${THUMB_W}px` }"
     data-role="thumbnail"
     draggable="true"
     @dragstart="onDragStart"
   >
+    <div
+      class="absolute border border-neutral-400"
+      :style="{
+        width: `${size.w * scale}px`,
+        height: `${size.h * scale}px`,
+        top: `${offsetY}px`,
+        left: `${offsetX}px`,
+        backgroundColor: background,
+      }"
+      data-role="thumbnail-outline"
+    ></div>
     <div
       class="absolute origin-top-left"
       :style="{
@@ -40,7 +51,6 @@ function onDragStart(e: DragEvent) {
         height: `${size.h}px`,
         top: `${offsetY}px`,
         left: `${offsetX}px`,
-        backgroundColor: background,
         transform: `scale(${scale})`,
       }"
       data-role="thumbnail-inner"

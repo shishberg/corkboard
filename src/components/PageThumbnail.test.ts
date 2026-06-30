@@ -7,15 +7,6 @@ import { makeDrawingElement } from '@/stores/elementFactory'
 
 beforeEach(() => setActivePinia(createPinia()))
 
-function visualSize(el: HTMLElement): { width: number; height: number } {
-  const m = el.style.transform.match(/scale\(([\d.]+)\)/)
-  const scale = m ? parseFloat(m[1]) : 1
-  return {
-    width: parseFloat(el.style.width) * scale,
-    height: parseFloat(el.style.height) * scale,
-  }
-}
-
 describe('PageThumbnail', () => {
   it('renders a drawing element as an svg with data-role="drawing"', () => {
     const store = usePagesStore()
@@ -26,7 +17,7 @@ describe('PageThumbnail', () => {
     expect(w.find('[data-role="drawing"]').exists()).toBe(true)
   })
 
-  it("uses a fixed 120×120 outer box for each thumbnail's own orientation", () => {
+  it("uses a fixed 120×120 square with a page-shaped outline for each thumbnail's own orientation", () => {
     const store = usePagesStore()
     const landscapeId = store.selectedPageId!
     const portraitId = store.addPage()
@@ -36,20 +27,32 @@ describe('PageThumbnail', () => {
     const landscape = mount(PageThumbnail, { props: { pageId: landscapeId } })
     const portrait = mount(PageThumbnail, { props: { pageId: portraitId } })
 
+    // The outer is just a 120×120 positioning container — no border, no
+    // background, so a white page isn't camouflaged against it.
     const landscapeOuter = landscape.element as HTMLElement
     const portraitOuter = portrait.element as HTMLElement
     expect(landscapeOuter.style.width).toBe('120px')
     expect(landscapeOuter.style.height).toBe('120px')
     expect(portraitOuter.style.width).toBe('120px')
     expect(portraitOuter.style.height).toBe('120px')
+    expect(landscapeOuter.classList.contains('border')).toBe(false)
+    expect(landscapeOuter.classList.contains('bg-white')).toBe(false)
+    expect(portraitOuter.classList.contains('border')).toBe(false)
+    expect(portraitOuter.classList.contains('bg-white')).toBe(false)
 
-    const landscapeInner = landscape.find('[data-role="thumbnail-inner"]').element as HTMLElement
-    const portraitInner = portrait.find('[data-role="thumbnail-inner"]').element as HTMLElement
-    expect(visualSize(landscapeInner)).toEqual({ width: 120, height: 72 })
-    expect(visualSize(portraitInner)).toEqual({ width: 72, height: 120 })
+    // The outline is the visible page rectangle at display size, bordered, so
+    // the page outline is visible even when the page background is white.
+    const landscapeOutline = landscape.find('[data-role="thumbnail-outline"]').element as HTMLElement
+    const portraitOutline = portrait.find('[data-role="thumbnail-outline"]').element as HTMLElement
+    expect(landscapeOutline.style.width).toBe('120px')
+    expect(landscapeOutline.style.height).toBe('72px')
+    expect(portraitOutline.style.width).toBe('72px')
+    expect(portraitOutline.style.height).toBe('120px')
+    expect(landscapeOutline.classList.contains('border')).toBe(true)
+    expect(portraitOutline.classList.contains('border')).toBe(true)
   })
 
-  it('centers the scaled content inside the 120×120 box', () => {
+  it('centers the page outline inside the 120×120 box', () => {
     const store = usePagesStore()
     const landscapeId = store.selectedPageId!
     const portraitId = store.addPage()
@@ -59,30 +62,28 @@ describe('PageThumbnail', () => {
     const landscape = mount(PageThumbnail, { props: { pageId: landscapeId } })
     const portrait = mount(PageThumbnail, { props: { pageId: portraitId } })
 
-    const landscapeInner = landscape.find('[data-role="thumbnail-inner"]').element as HTMLElement
-    const portraitInner = portrait.find('[data-role="thumbnail-inner"]').element as HTMLElement
-    expect(landscapeInner.style.top).toBe('24px')
-    expect(landscapeInner.style.left).toBe('0px')
-    expect(portraitInner.style.top).toBe('0px')
-    expect(portraitInner.style.left).toBe('24px')
+    const landscapeOutline = landscape.find('[data-role="thumbnail-outline"]').element as HTMLElement
+    const portraitOutline = portrait.find('[data-role="thumbnail-outline"]').element as HTMLElement
+    expect(landscapeOutline.style.top).toBe('24px')
+    expect(landscapeOutline.style.left).toBe('0px')
+    expect(portraitOutline.style.top).toBe('0px')
+    expect(portraitOutline.style.left).toBe('24px')
   })
 
-  it('paints the inner page rectangle with the page background colour', () => {
+  it('paints the page outline with the page background colour', () => {
     const store = usePagesStore()
     store.setPageBackground('red')
     const pageId = store.selectedPageId!
     const w = mount(PageThumbnail, { props: { pageId } })
-    const inner = w.find('[data-role="thumbnail-inner"]').element as HTMLElement
-    expect(inner.style.backgroundColor).toBe('red')
+    const outline = w.find('[data-role="thumbnail-outline"]').element as HTMLElement
+    expect(outline.style.backgroundColor).toBe('red')
   })
 
-  it('defaults the inner page background to white when the page has none', () => {
+  it('defaults the page outline background to white when the page has none', () => {
     const store = usePagesStore()
-    store.setPageBackground('yellow')
     const pageId = store.selectedPageId!
-    store.setPageBackground('white')
     const w = mount(PageThumbnail, { props: { pageId } })
-    const inner = w.find('[data-role="thumbnail-inner"]').element as HTMLElement
-    expect(inner.style.backgroundColor).toBe('white')
+    const outline = w.find('[data-role="thumbnail-outline"]').element as HTMLElement
+    expect(outline.style.backgroundColor).toBe('white')
   })
 })
