@@ -1,4 +1,5 @@
 use std::io::Cursor;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tokio::sync::watch;
 
@@ -17,6 +18,9 @@ pub struct WebPreview {
     /// Notifies long-pollers of a new render. The watched value is the latest
     /// `updated_at`.
     tx: watch::Sender<i64>,
+    /// How many times `show` has been called. Tests use this to count renders
+    /// without parsing timestamps.
+    render_count: AtomicUsize,
 }
 
 impl WebPreview {
@@ -28,6 +32,7 @@ impl WebPreview {
                 bytes: vec![],
             }),
             tx,
+            render_count: AtomicUsize::new(0),
         }
     }
 
@@ -47,6 +52,13 @@ impl WebPreview {
         self.frame.lock().unwrap().updated_at
     }
 
+    /// Number of times `show` has been called. Useful for tests asserting that
+    /// a code path performed exactly N renders, not just "at least one".
+    #[allow(dead_code)]
+    pub fn render_count(&self) -> usize {
+        self.render_count.load(Ordering::Relaxed)
+    }
+
     /// Subscribe to render notifications. The receiver's value is the latest
     /// `updated_at`; `changed()` resolves on the next render.
     pub fn subscribe(&self) -> watch::Receiver<i64> {
@@ -56,6 +68,7 @@ impl WebPreview {
 
 impl Display for WebPreview {
     fn show(&self, png: &[u8]) -> anyhow::Result<()> {
+        self.render_count.fetch_add(1, Ordering::Relaxed);
         let now = chrono::Utc::now().timestamp_millis();
         {
             let mut frame = self.frame.lock().unwrap();

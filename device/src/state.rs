@@ -127,18 +127,42 @@ impl AppState {
         CalendarData { today, feeds }
     }
 
-    /// Force-resolve all feeds, store the result, update the signature, and re-render.
+    /// Re-render the live page with the current calendar data immediately,
+    /// then re-resolve all feeds in the background and re-render again only
+    /// when the semantic content has changed.
     ///
-    /// Called by `POST /api/refresh` and `PUT /api/document`.
+    /// Called by `POST /api/refresh` and `PUT /api/document`. The render-first
+    /// order means /preview.png reflects the new document (e.g. a flipped
+    /// orientation) without waiting for the calendar feed to be fetched.
     pub async fn refresh_and_render(&self) -> anyhow::Result<()> {
-        tracing::info!("refreshing: re-resolving calendar feeds and re-rendering");
+        tracing::info!("refresh: rendering first, then re-resolving feeds");
+        // Render the new document first with whatever calendar data is currently
+        // cached, so the user sees the change (e.g. flipped orientation) on
+        // /preview.png immediately rather than waiting for the feed fetch.
+        self.render_and_show()?;
+
+        // Then re-resolve feeds and re-render only if the semantic content
+        // actually changed.
         let data = self.resolve_calendar().await;
-        let sig = calendar::signature(data.today, &data.feeds);
+        let new_sig = calendar::signature(data.today, &data.feeds);
 
-        *self.calendar.lock().unwrap() = data;
-        *self.displayed_signature.lock().unwrap() = Some(sig);
+        let changed = {
+            let guard = self.displayed_signature.lock().unwrap();
+            match guard.as_deref() {
+                Some(old_sig) => old_sig != new_sig,
+                None => true,
+            }
+        };
 
-        self.render_and_show()
+        if changed {
+            *self.calendar.lock().unwrap() = data;
+            *self.displayed_signature.lock().unwrap() = Some(new_sig);
+            self.render_and_show()?;
+            tracing::info!("refresh: feed content changed, re-rendered");
+        } else {
+            tracing::info!("refresh: feed content unchanged, skipped re-render");
+        }
+        Ok(())
     }
 
     /// Resolve feeds and re-render ONLY when the semantic content has changed.
@@ -167,5 +191,151 @@ impl AppState {
         } else {
             Ok(false)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        config::Feed,
+        display::WebPreview,
+        document::{CalendarEl, CalendarVariant, Colour, Document, Element, TextAlign},
+        fonts::Fonts,
+        storage::Storage,
+    };
+    use std::sync::{Arc, Mutex};
+    use tokio::io::AsyncReadExt;
+
+    fn make_state() -> Arc<AppState> {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.keep();
+        let storage = Storage::new(&path);
+        let config = storage.load_config();
+        let document = Document::default();
+        let preview = Arc::new(WebPreview::new());
+
+        Arc::new(AppState {
+            storage,
+            config: Mutex::new(config),
+            document: Mutex::new(document),
+            display: preview.clone(),
+            web_preview: preview,
+            fonts: Arc::new(Fonts::load()),
+            calendar: Mutex::new(CalendarData::empty()),
+            displayed_signature: Mutex::new(None),
+        })
+    }
+
+    // `refresh_and_render` is called on every PUT and on /api/refresh. The user
+    // expects the new document to be visible in /preview.png immediately, even
+    // before calendar feeds have been re-fetched. The fix renders first (with
+    // whatever calendar data is cached) and only then re-resolves feeds in the
+    // background.
+    #[tokio::test]
+    async fn refresh_and_render_updates_preview_before_awaiting_calendar() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let accept_task = tokio::spawn(async move {
+            if let Ok((mut stream, _)) = listener.accept().await {
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf).await;
+                std::future::pending::<()>().await;
+            }
+        });
+
+        let state = make_state();
+        {
+            let mut cfg = state.config.lock().unwrap();
+            cfg.feeds = vec![Feed {
+                id: "hung-feed".to_string(),
+                name: "Hung".to_string(),
+                secret_url: format!("http://127.0.0.1:{port}/path"),
+            }];
+        }
+
+        {
+            let mut doc = Document::default();
+            let page_id = doc.pages[0].id.clone();
+            doc.pages[0].elements.push(Element::Calendar(CalendarEl {
+                id: "el-cal-1".to_string(),
+                x: 10.0,
+                y: 10.0,
+                w: 300.0,
+                h: 200.0,
+                colour: Colour::Black,
+                variant: CalendarVariant::Agenda,
+                feed_id: "hung-feed".to_string(),
+                font: String::new(),
+                align: TextAlign::Center,
+                days_ahead: 7,
+                outline: None,
+            }));
+            doc.live_page_id = Some(page_id);
+            state.storage.save_document(&doc).unwrap();
+            *state.document.lock().unwrap() = doc;
+        }
+
+        assert_eq!(state.web_preview.updated_at(), 0);
+
+        let state_for_task = state.clone();
+        let render_task = tokio::spawn(async move {
+            state_for_task.refresh_and_render().await
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        assert!(
+            state.web_preview.updated_at() > 0,
+            "preview should be updated before the calendar fetch completes"
+        );
+
+        render_task.abort();
+        accept_task.abort();
+    }
+
+    // The conditional re-render in `refresh_and_render` must NOT re-render
+    // when the resolved calendar signature is unchanged. We pre-populate the
+    // signature with the value that a no-feeds `resolve_calendar` will return,
+    // then call `refresh_and_render` and assert the render count advanced by
+    // exactly 1 (the initial render; the conditional re-render is skipped).
+    #[tokio::test]
+    async fn refresh_and_render_skips_second_render_when_signature_unchanged() {
+        let state = make_state();
+        // Warm up: produce the "no feeds" signature the test will match.
+        let baseline = state.resolve_calendar().await;
+        let sig = crate::calendar::signature(baseline.today, &baseline.feeds);
+        *state.displayed_signature.lock().unwrap() = Some(sig);
+
+        let before = state.web_preview.render_count();
+        state.refresh_and_render().await.unwrap();
+        let after = state.web_preview.render_count();
+
+        assert_eq!(
+            after - before,
+            1,
+            "expected exactly one render (the initial one); the conditional re-render should be skipped when the signature is unchanged"
+        );
+    }
+
+    // When the signature DOES change between calls (e.g. a feed returned new
+    // events), `refresh_and_render` should perform both renders: the initial
+    // one for the new document, and the conditional one for the new content.
+    #[tokio::test]
+    async fn refresh_and_render_renders_twice_when_signature_changes() {
+        let state = make_state();
+        // Seed with a signature that will NOT match a fresh `resolve_calendar`.
+        *state.displayed_signature.lock().unwrap() = Some("stale-signature".to_string());
+
+        let before = state.web_preview.render_count();
+        state.refresh_and_render().await.unwrap();
+        let after = state.web_preview.render_count();
+
+        assert_eq!(
+            after - before,
+            2,
+            "expected the initial render plus a conditional re-render when the signature changed"
+        );
     }
 }
