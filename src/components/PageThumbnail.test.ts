@@ -66,4 +66,23 @@ describe('PageThumbnail', () => {
     expect(portraitInner.style.top).toBe('0px')
     expect(portraitInner.style.left).toBe('24px')
   })
+
+  it('paints the inner page rectangle with the page background colour', () => {
+    const store = usePagesStore()
+    store.setPageBackground('red')
+    const pageId = store.selectedPageId!
+    const w = mount(PageThumbnail, { props: { pageId } })
+    const inner = w.find('[data-role="thumbnail-inner"]').element as HTMLElement
+    expect(inner.style.backgroundColor).toBe('red')
+  })
+
+  it('defaults the inner page background to white when the page has none', () => {
+    const store = usePagesStore()
+    store.setPageBackground('yellow')
+    const pageId = store.selectedPageId!
+    store.setPageBackground('white')
+    const w = mount(PageThumbnail, { props: { pageId } })
+    const inner = w.find('[data-role="thumbnail-inner"]').element as HTMLElement
+    expect(inner.style.backgroundColor).toBe('white')
+  })
 })

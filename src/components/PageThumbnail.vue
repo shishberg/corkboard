@@ -18,6 +18,7 @@ const size = computed(() => pageSize(page.value))
 const scale = computed(() => Math.min(THUMB_W / size.value.w, THUMB_W / size.value.h))
 const offsetX = computed(() => (THUMB_W - size.value.w * scale.value) / 2)
 const offsetY = computed(() => (THUMB_W - size.value.h * scale.value) / 2)
+const background = computed(() => page.value?.background ?? 'white')
 
 function onDragStart(e: DragEvent) {
   e.dataTransfer?.setData('text/plain', props.pageId)
@@ -39,6 +40,7 @@ function onDragStart(e: DragEvent) {
         height: `${size.h}px`,
         top: `${offsetY}px`,
         left: `${offsetX}px`,
+        backgroundColor: background,
         transform: `scale(${scale})`,
       }"
       data-role="thumbnail-inner"
