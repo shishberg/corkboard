@@ -41,4 +41,40 @@ describe('DashboardApp', () => {
     await flushPromises()
     expect(w.text()).toContain('unreachable')
   })
+
+  it('has an Editor link back to the editor', async () => {
+    vi.spyOn(deviceApi, 'fetchStatus').mockResolvedValue(sampleStatus())
+    const w = mount(DashboardApp)
+    await flushPromises()
+    expect(w.get('[data-role="editor"]').attributes('href')).toBe('/')
+  })
+
+  it('shows a feed’s today events and errors', async () => {
+    const status = sampleStatus()
+    status.feeds = [
+      {
+        id: 'family',
+        name: 'Family',
+        lastAttemptMs: 500,
+        ok: true,
+        todayEventCount: 1,
+        error: null,
+        todayEvents: [{ time: '09:00', title: 'Standup' }],
+      },
+      {
+        id: 'work',
+        name: 'Work',
+        lastAttemptMs: 500,
+        ok: false,
+        todayEventCount: null,
+        error: 'HTTP 404',
+        todayEvents: [],
+      },
+    ]
+    vi.spyOn(deviceApi, 'fetchStatus').mockResolvedValue(status)
+    const w = mount(DashboardApp)
+    await flushPromises()
+    expect(w.text()).toContain('Standup')
+    expect(w.text()).toContain('HTTP 404')
+  })
 })

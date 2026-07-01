@@ -34,6 +34,19 @@ pub struct FeedInfo {
     pub ok: Option<bool>,
     pub today_event_count: Option<usize>,
     pub error: Option<String>,
+    /// Today's events as currently shown on the display — from the last
+    /// resolve that actually changed content, not necessarily the most
+    /// recent fetch attempt (a poll that finds no change never updates
+    /// `AppState::calendar`). Empty if the feed has never resolved.
+    pub today_events: Vec<EventInfo>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventInfo {
+    /// "HH:MM", or "" for an all-day event.
+    pub time: String,
+    pub title: String,
 }
 
 #[derive(Serialize)]
@@ -93,12 +106,25 @@ pub fn build(state: &AppState) -> DashboardStatus {
     let cfg = state.config.lock().unwrap().clone();
     let doc = state.document.lock().unwrap().clone();
     let feed_status = state.feed_status.lock().unwrap().clone();
+    let calendar = state.calendar.lock().unwrap();
 
     let feeds = cfg
         .feeds
         .iter()
         .map(|f| {
             let s = feed_status.get(&f.id);
+            let today_events = calendar
+                .for_feed(&f.id)
+                .map(|rf| {
+                    rf.today
+                        .iter()
+                        .map(|e| EventInfo {
+                            time: e.time.clone(),
+                            title: e.title.clone(),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             FeedInfo {
                 id: f.id.clone(),
                 name: f.name.clone(),
@@ -106,9 +132,11 @@ pub fn build(state: &AppState) -> DashboardStatus {
                 ok: s.map(|s| s.ok),
                 today_event_count: s.and_then(|s| s.today_event_count),
                 error: s.and_then(|s| s.error.clone()),
+                today_events,
             }
         })
         .collect();
+    drop(calendar);
 
     let live_page = doc.live_page();
     let document = DocumentInfo {
@@ -233,10 +261,50 @@ mod tests {
         assert_eq!(status.feeds[0].id, "family");
         assert_eq!(status.feeds[0].ok, Some(false));
         assert_eq!(status.feeds[0].error.as_deref(), Some("HTTP 404"));
+        assert!(status.feeds[0].today_events.is_empty());
 
         // The secret URL must never appear anywhere in the serialized status.
         let json = serde_json::to_string(&status).unwrap();
         assert!(!json.contains("secret.example.com"));
         assert!(!json.contains("token"));
+    }
+
+    #[test]
+    fn build_surfaces_todays_events_from_the_currently_displayed_calendar() {
+        use crate::calendar::{CalendarData, ResolvedEvent, ResolvedFeed};
+        use crate::config::Feed;
+        use std::collections::BTreeMap;
+
+        let state = make_state();
+        {
+            let mut cfg = state.config.lock().unwrap();
+            cfg.feeds = vec![Feed {
+                id: "family".to_string(),
+                name: "Family".to_string(),
+                secret_url: "https://secret.example.com/token".to_string(),
+            }];
+        }
+
+        let mut feeds = BTreeMap::new();
+        feeds.insert(
+            "family".to_string(),
+            ResolvedFeed {
+                today: vec![ResolvedEvent {
+                    time: "09:00".to_string(),
+                    title: "Standup".to_string(),
+                }],
+                week: Default::default(),
+                week_labels: Default::default(),
+            },
+        );
+        *state.calendar.lock().unwrap() = CalendarData {
+            today: (2026, 7, 1),
+            feeds,
+        };
+
+        let status = build(&state);
+        assert_eq!(status.feeds[0].today_events.len(), 1);
+        assert_eq!(status.feeds[0].today_events[0].time, "09:00");
+        assert_eq!(status.feeds[0].today_events[0].title, "Standup");
     }
 }

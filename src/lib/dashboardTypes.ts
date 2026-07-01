@@ -1,6 +1,11 @@
 // Mirrors device/src/status.rs's `DashboardStatus` (camelCase over the wire,
 // same as every other endpoint).
 
+export interface EventInfo {
+  time: string
+  title: string
+}
+
 export interface FeedInfo {
   id: string
   name: string
@@ -8,6 +13,7 @@ export interface FeedInfo {
   ok: boolean | null
   todayEventCount: number | null
   error: string | null
+  todayEvents: EventInfo[]
 }
 
 export interface DocumentInfo {

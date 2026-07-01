@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useDeviceStatus } from '@/composables/useDeviceStatus'
+import { Button } from '@/components/ui/button'
 import PreviewPanel from '@/components/dashboard/PreviewPanel.vue'
 import DocumentPanel from '@/components/dashboard/DocumentPanel.vue'
 import DevicePanel from '@/components/dashboard/DevicePanel.vue'
@@ -12,13 +13,16 @@ const { status, unreachable } = useDeviceStatus()
 
 <template>
   <div class="mx-auto max-w-6xl p-5">
-    <header class="mb-4">
-      <h1 class="text-lg font-semibold">Corkboard</h1>
-      <p v-if="status" class="text-sm text-neutral-500">
-        {{ status.hostname }} · {{ status.display.os }}/{{ status.display.arch }}
-      </p>
-      <p v-else-if="unreachable" class="text-sm text-red-600">device unreachable — retrying…</p>
-      <p v-else class="text-sm text-neutral-500">loading…</p>
+    <header class="mb-4 flex items-start justify-between">
+      <div>
+        <h1 class="text-lg font-semibold">Corkboard</h1>
+        <p v-if="status" class="text-sm text-neutral-500">
+          {{ status.hostname }} · {{ status.display.os }}/{{ status.display.arch }}
+        </p>
+        <p v-else-if="unreachable" class="text-sm text-red-600">device unreachable — retrying…</p>
+        <p v-else class="text-sm text-neutral-500">loading…</p>
+      </div>
+      <Button data-role="editor" as="a" href="/" variant="outline" size="sm">Editor</Button>
     </header>
 
     <template v-if="status">

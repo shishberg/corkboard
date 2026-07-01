@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import StatCard from './StatCard.vue'
 import { formatAgo } from '@/lib/dashboardFormat'
 import type { FeedInfo } from '@/lib/dashboardTypes'
 
@@ -19,29 +18,29 @@ function badgeText(f: FeedInfo): string {
 </script>
 
 <template>
-  <StatCard title="Calendar feeds">
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="text-left text-neutral-500">
-          <th class="pb-1 pr-3 font-normal">Feed</th>
-          <th class="pb-1 pr-3 font-normal">Status</th>
-          <th class="pb-1 pr-3 font-normal">Last attempt</th>
-          <th class="pb-1 pr-3 font-normal">Events today</th>
-          <th class="pb-1 font-normal">Detail</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="feeds.length === 0">
-          <td colspan="5" class="italic text-neutral-500">no feeds configured</td>
-        </tr>
-        <tr v-for="f in feeds" :key="f.id">
-          <td class="pr-3">{{ f.name }}</td>
-          <td class="pr-3"><span class="rounded-full px-2 py-0.5 text-xs" :class="badgeClass(f)">{{ badgeText(f) }}</span></td>
-          <td class="pr-3">{{ f.lastAttemptMs ? formatAgo(f.lastAttemptMs) : '—' }}</td>
-          <td class="pr-3">{{ f.todayEventCount ?? '—' }}</td>
-          <td>{{ f.error ?? '' }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </StatCard>
+  <div>
+    <h2 class="mb-3 text-xs font-semibold tracking-wide text-neutral-500 uppercase">Calendar feeds</h2>
+    <div v-if="feeds.length === 0" class="rounded-lg border bg-white p-4 text-sm italic text-neutral-500">
+      no feeds configured
+    </div>
+    <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div v-for="f in feeds" :key="f.id" class="rounded-lg border bg-white p-4">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span class="text-sm font-medium">{{ f.name }}</span>
+          <span class="shrink-0 rounded-full px-2 py-0.5 text-xs" :class="badgeClass(f)">{{ badgeText(f) }}</span>
+        </div>
+        <div class="mb-2 text-xs text-neutral-500">
+          last attempt {{ f.lastAttemptMs ? formatAgo(f.lastAttemptMs) : '—' }}
+        </div>
+        <p v-if="f.error" class="mb-2 text-sm text-red-600">{{ f.error }}</p>
+        <ul v-if="f.todayEvents.length > 0" class="space-y-1 text-sm">
+          <li v-for="(e, i) in f.todayEvents" :key="i" class="flex gap-2">
+            <span class="w-14 shrink-0 text-neutral-500">{{ e.time || 'all day' }}</span>
+            <span>{{ e.title }}</span>
+          </li>
+        </ul>
+        <p v-else class="text-sm italic text-neutral-500">no events today</p>
+      </div>
+    </div>
+  </div>
 </template>

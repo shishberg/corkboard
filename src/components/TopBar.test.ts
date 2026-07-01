@@ -56,4 +56,11 @@ describe('TopBar', () => {
     expect(preview.attributes('href')).toBe('/preview')
     expect(preview.attributes('target')).toBe('_blank')
   })
+
+  it('has a Dashboard link that opens the status dashboard in a new tab', () => {
+    const w = mount(TopBar)
+    const dashboard = w.get('[data-role="dashboard"]')
+    expect(dashboard.attributes('href')).toBe('/dashboard')
+    expect(dashboard.attributes('target')).toBe('_blank')
+  })
 })

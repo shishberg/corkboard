@@ -38,6 +38,7 @@ async function publish() {
         {{ store.selectedPage?.orientation ?? 'landscape' }}
       </button>
       <Button data-role="preview" as="a" href="/preview" target="_blank" rel="noopener" variant="outline" size="sm">Preview</Button>
+      <Button data-role="dashboard" as="a" href="/dashboard" target="_blank" rel="noopener" variant="outline" size="sm">Dashboard</Button>
       <Button data-role="publish" size="sm" @click="publish">Publish</Button>
     </div>
   </header>

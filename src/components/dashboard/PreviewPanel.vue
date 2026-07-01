@@ -18,7 +18,7 @@ const src = computed(() => `/preview.png?v=${props.preview.updatedAtMs}`)
         <img
           :src="src"
           alt="live preview"
-          class="block h-[480px] w-[800px] rounded border [image-rendering:pixelated]"
+          class="block rounded border [image-rendering:pixelated]"
         />
       </a>
       <table class="text-sm">
