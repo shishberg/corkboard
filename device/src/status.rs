@@ -34,11 +34,20 @@ pub struct FeedInfo {
     pub ok: Option<bool>,
     pub today_event_count: Option<usize>,
     pub error: Option<String>,
-    /// Today's events as currently shown on the display — from the last
-    /// resolve that actually changed content, not necessarily the most
-    /// recent fetch attempt (a poll that finds no change never updates
-    /// `AppState::calendar`). Empty if the feed has never resolved.
-    pub today_events: Vec<EventInfo>,
+    /// The next 7 days (index 0 = today) as currently shown on the display —
+    /// from the last resolve that actually changed content, not necessarily
+    /// the most recent fetch attempt (a poll that finds no change never
+    /// updates `AppState::calendar`). Empty if the feed has never resolved.
+    pub week: Vec<DayEvents>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayEvents {
+    /// "Today", "Tomorrow", then the weekday name — matches the renderer's
+    /// own agenda headings (`render::agenda_heading`).
+    pub label: String,
+    pub events: Vec<EventInfo>,
 }
 
 #[derive(Serialize)]
@@ -113,14 +122,22 @@ pub fn build(state: &AppState) -> DashboardStatus {
         .iter()
         .map(|f| {
             let s = feed_status.get(&f.id);
-            let today_events = calendar
+            let week = calendar
                 .for_feed(&f.id)
                 .map(|rf| {
-                    rf.today
+                    rf.week
                         .iter()
-                        .map(|e| EventInfo {
-                            time: e.time.clone(),
-                            title: e.title.clone(),
+                        .zip(rf.week_labels.iter())
+                        .enumerate()
+                        .map(|(slot, (events, label))| DayEvents {
+                            label: crate::render::agenda_heading(slot, label),
+                            events: events
+                                .iter()
+                                .map(|e| EventInfo {
+                                    time: e.time.clone(),
+                                    title: e.title.clone(),
+                                })
+                                .collect(),
                         })
                         .collect()
                 })
@@ -132,7 +149,7 @@ pub fn build(state: &AppState) -> DashboardStatus {
                 ok: s.map(|s| s.ok),
                 today_event_count: s.and_then(|s| s.today_event_count),
                 error: s.and_then(|s| s.error.clone()),
-                today_events,
+                week,
             }
         })
         .collect();
@@ -261,7 +278,7 @@ mod tests {
         assert_eq!(status.feeds[0].id, "family");
         assert_eq!(status.feeds[0].ok, Some(false));
         assert_eq!(status.feeds[0].error.as_deref(), Some("HTTP 404"));
-        assert!(status.feeds[0].today_events.is_empty());
+        assert!(status.feeds[0].week.is_empty());
 
         // The secret URL must never appear anywhere in the serialized status.
         let json = serde_json::to_string(&status).unwrap();
@@ -270,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn build_surfaces_todays_events_from_the_currently_displayed_calendar() {
+    fn build_surfaces_the_week_ahead_from_the_currently_displayed_calendar() {
         use crate::calendar::{CalendarData, ResolvedEvent, ResolvedFeed};
         use crate::config::Feed;
         use std::collections::BTreeMap;
@@ -285,16 +302,25 @@ mod tests {
             }];
         }
 
+        let mut week: [Vec<ResolvedEvent>; 7] = Default::default();
+        week[0] = vec![ResolvedEvent {
+            time: "09:00".to_string(),
+            title: "Standup".to_string(),
+        }];
+        week[2] = vec![ResolvedEvent {
+            time: "".to_string(),
+            title: "Bin day".to_string(),
+        }];
+        let mut week_labels: [String; 7] = Default::default();
+        week_labels[2] = "Friday".to_string();
+
         let mut feeds = BTreeMap::new();
         feeds.insert(
             "family".to_string(),
             ResolvedFeed {
-                today: vec![ResolvedEvent {
-                    time: "09:00".to_string(),
-                    title: "Standup".to_string(),
-                }],
-                week: Default::default(),
-                week_labels: Default::default(),
+                today: week[0].clone(),
+                week,
+                week_labels,
             },
         );
         *state.calendar.lock().unwrap() = CalendarData {
@@ -303,8 +329,14 @@ mod tests {
         };
 
         let status = build(&state);
-        assert_eq!(status.feeds[0].today_events.len(), 1);
-        assert_eq!(status.feeds[0].today_events[0].time, "09:00");
-        assert_eq!(status.feeds[0].today_events[0].title, "Standup");
+        let days = &status.feeds[0].week;
+        assert_eq!(days.len(), 7);
+        assert_eq!(days[0].label, "Today");
+        assert_eq!(days[0].events[0].time, "09:00");
+        assert_eq!(days[0].events[0].title, "Standup");
+        assert_eq!(days[1].label, "Tomorrow");
+        assert!(days[1].events.is_empty());
+        assert_eq!(days[2].label, "Friday");
+        assert_eq!(days[2].events[0].title, "Bin day");
     }
 }

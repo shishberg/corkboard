@@ -33,13 +33,18 @@ function badgeText(f: FeedInfo): string {
           last attempt {{ f.lastAttemptMs ? formatAgo(f.lastAttemptMs) : '—' }}
         </div>
         <p v-if="f.error" class="mb-2 text-sm text-red-600">{{ f.error }}</p>
-        <ul v-if="f.todayEvents.length > 0" class="space-y-1 text-sm">
-          <li v-for="(e, i) in f.todayEvents" :key="i" class="flex gap-2">
-            <span class="w-14 shrink-0 text-neutral-500">{{ e.time || 'all day' }}</span>
-            <span>{{ e.title }}</span>
-          </li>
-        </ul>
-        <p v-else class="text-sm italic text-neutral-500">no events today</p>
+        <p v-if="f.week.length === 0" class="text-sm italic text-neutral-500">not resolved yet</p>
+        <div v-else class="space-y-1.5 text-sm">
+          <div v-for="day in f.week" :key="day.label" class="flex gap-2">
+            <span class="w-20 shrink-0 text-neutral-500">{{ day.label }}</span>
+            <div v-if="day.events.length > 0" class="space-y-0.5">
+              <div v-for="(e, i) in day.events" :key="i">
+                <span class="text-neutral-500">{{ e.time || 'all day' }}</span> {{ e.title }}
+              </div>
+            </div>
+            <span v-else class="text-neutral-400">—</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>

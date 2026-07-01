@@ -399,7 +399,9 @@ fn to_12h(hhmm: &str) -> String {
 }
 
 /// Day heading for agenda slot `i`: "Today", "Tomorrow", then the weekday name.
-fn agenda_heading(slot: usize, weekday_name: &str) -> String {
+/// `pub(crate)` so the dashboard's week view (status.rs) can match the
+/// renderer's own headings instead of re-deriving them.
+pub(crate) fn agenda_heading(slot: usize, weekday_name: &str) -> String {
     match slot {
         0 => "Today".to_string(),
         1 => "Tomorrow".to_string(),

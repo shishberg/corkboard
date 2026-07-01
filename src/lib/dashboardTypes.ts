@@ -6,6 +6,11 @@ export interface EventInfo {
   title: string
 }
 
+export interface DayEvents {
+  label: string
+  events: EventInfo[]
+}
+
 export interface FeedInfo {
   id: string
   name: string
@@ -13,7 +18,8 @@ export interface FeedInfo {
   ok: boolean | null
   todayEventCount: number | null
   error: string | null
-  todayEvents: EventInfo[]
+  /** The next 7 days, index 0 = today. Empty if the feed has never resolved. */
+  week: DayEvents[]
 }
 
 export interface DocumentInfo {
