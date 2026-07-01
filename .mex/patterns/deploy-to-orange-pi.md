@@ -52,12 +52,20 @@ not part of this setup.
    login and walks you through creating a non-root user — use that user (with sudo) from
    here on.
 5. `sudo apt update && sudo apt full-upgrade -y`
-6. **Enable SPI.** `sudo armbian-config` → *System* → *Hardware* → enable the
-   `spi-spidev` overlay (or add it under `overlays=` in `/boot/armbianEnv.txt`
-   directly). Reboot, then confirm `/dev/spidev0.0` exists.
-7. **Install build deps:** `sudo apt install -y git build-essential pkg-config` —
+6. **Enable SPI.** Edit `/boot/armbianEnv.txt` and set `overlays=spidev0_0` — the
+   H616's purpose-built overlay that needs no parameters and gives you
+   `/dev/spidev0.0` (bus 0, CS 0). Reboot, then confirm `/dev/spidev0.0` exists.
+
+   Do NOT use the generic `spi-spidev` overlay alone: it requires a
+   `param_spidev_spi_bus=0` line as well, and silently binds to nothing without it
+   (no `/dev/spidev*` node appears). `/dev/mtd/by-name/spi0.0` is the SPI *flash
+   chip*, not the userspace SPI interface — it's there regardless and is not what
+   the panel driver opens.
+7. **Install build deps:** `sudo apt install -y git build-essential pkg-config zlib1g-dev` —
    `freetype-rs`'s `bundled` feature compiles FreeType from C source, so a compiler is
-   required.
+   required. It also builds a bundled libpng, which needs zlib's dev headers
+   (`zlib1g-dev`) — without them the build fails with `fatal error: zlib.h: No such
+   file or directory`.
 8. **Install Rust:** `curl https://sh.rustup.rs -sSf | sh`, then
    `source "$HOME/.cargo/env"`. Native on-device build is simplest — no cross-compile
    target is set up. It's slow on a quad-core A53 (FreeType compiles from source; expect
@@ -90,7 +98,11 @@ not part of this setup.
     Environment=CORKBOARD_DIST=/home/pi/corkboard/dist
     Environment=CORKBOARD_FONTS=/home/pi/corkboard/public/fonts
     Environment=CORKBOARD_DATA=/home/pi/corkboard/device/data
+    Environment=CORKBOARD_PORT=80
     ExecStart=/home/pi/corkboard/device/target/release/corkboard-device
+    # Port 80 is privileged; this grants just the bind capability so the service
+    # can stay non-root (User=pi) instead of running as root.
+    AmbientCapabilities=CAP_NET_BIND_SERVICE
     Restart=on-failure
 
     [Install]
@@ -99,7 +111,7 @@ not part of this setup.
     Use absolute paths in the unit — unlike running `cargo run` from `device/`, systemd
     doesn't give you the `../dist`/`../public/fonts` relative defaults for free.
     `sudo systemctl daemon-reload && sudo systemctl enable --now corkboard-device`
-12. **Verify:** `http://<pi-ip-or-hostname>:8080/preview.png` loads from another machine
+12. **Verify:** `http://<pi-ip-or-hostname>/preview.png` loads from another machine
     on the LAN.
 
 ## The panel driver — code is written, hardware verification is not
