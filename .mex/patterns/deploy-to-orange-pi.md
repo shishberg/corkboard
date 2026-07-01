@@ -16,7 +16,7 @@ edges:
     condition: for why Armbian (Debian) was chosen over Orange Pi OS (Arch)
   - target: context/setup.md
     condition: for the dev-machine toolchain (Node, Rust) this runbook builds on
-last_updated: 2026-07-01
+last_updated: 2026-07-02
 ---
 
 # Deploy the Device Server to the Orange Pi Zero 2W (Armbian, headless)
@@ -52,7 +52,18 @@ not part of this setup.
    login and walks you through creating a non-root user — use that user (with sudo) from
    here on.
 5. `sudo apt update && sudo apt full-upgrade -y`
-6. **Enable SPI.** Edit `/boot/armbianEnv.txt` and set `overlays=spidev0_0` — the
+6. **Make `<hostname>.local` resolve (mDNS).** `.local` names aren't DNS and the eero
+   router does nothing for them — each device answers for its own name over mDNS. macOS
+   (Bonjour) does this out of the box; Armbian doesn't until you install a responder:
+   ```
+   sudo hostnamectl set-hostname calcifer   # pick the name you want; no reboot needed
+   sudo apt install -y avahi-daemon
+   sudo systemctl enable --now avahi-daemon
+   ```
+   Now `calcifer.local` resolves from any Mac/Linux box on the LAN (`ping calcifer.local`).
+   Do this once per Pi with a unique hostname, or two boards will both claim the same
+   `.local` name.
+7. **Enable SPI.** Edit `/boot/armbianEnv.txt` and set `overlays=spidev0_0` — the
    H616's purpose-built overlay that needs no parameters and gives you
    `/dev/spidev0.0` (bus 0, CS 0). Reboot, then confirm `/dev/spidev0.0` exists.
 
@@ -61,17 +72,17 @@ not part of this setup.
    (no `/dev/spidev*` node appears). `/dev/mtd/by-name/spi0.0` is the SPI *flash
    chip*, not the userspace SPI interface — it's there regardless and is not what
    the panel driver opens.
-7. **Install build deps:** `sudo apt install -y git build-essential pkg-config zlib1g-dev` —
+8. **Install build deps:** `sudo apt install -y git build-essential pkg-config zlib1g-dev` —
    `freetype-rs`'s `bundled` feature compiles FreeType from C source, so a compiler is
    required. It also builds a bundled libpng, which needs zlib's dev headers
    (`zlib1g-dev`) — without them the build fails with `fatal error: zlib.h: No such
    file or directory`.
-8. **Install Rust:** `curl https://sh.rustup.rs -sSf | sh`, then
+9. **Install Rust:** `curl https://sh.rustup.rs -sSf | sh`, then
    `source "$HOME/.cargo/env"`. Native on-device build is simplest — no cross-compile
    target is set up. It's slow on a quad-core A53 (FreeType compiles from source; expect
    several minutes on the first build) but only needs to happen when the Rust code
    changes.
-9. **Get the code across.** The editor (`npm run build`) doesn't need to run on the Pi —
+10. **Get the code across.** The editor (`npm run build`) doesn't need to run on the Pi —
    build `dist/` on your dev machine and skip installing Node there. Two ways to land
    files:
    - `git clone` the repo directly on the Pi (needs a remote), then `rsync` just the
@@ -82,9 +93,9 @@ not part of this setup.
    Either way, also copy `device/data/config.json` **out of band** (scp, not git) — it
    holds the real secret iCal feed URL, which must never enter git history
    (`context/protocol.md`).
-10. **Build the device server:** `cd ~/corkboard/device && cargo build --release` →
+11. **Build the device server:** `cd ~/corkboard/device && cargo build --release` →
     binary at `device/target/release/corkboard-device`.
-11. **systemd service** — `/etc/systemd/system/corkboard-device.service`:
+12. **systemd service** — `/etc/systemd/system/corkboard-device.service`:
     ```ini
     [Unit]
     Description=Corkboard device server
@@ -111,7 +122,7 @@ not part of this setup.
     Use absolute paths in the unit — unlike running `cargo run` from `device/`, systemd
     doesn't give you the `../dist`/`../public/fonts` relative defaults for free.
     `sudo systemctl daemon-reload && sudo systemctl enable --now corkboard-device`
-12. **Verify:** `http://<pi-ip-or-hostname>/preview.png` loads from another machine
+13. **Verify:** `http://<pi-ip-or-hostname>/preview.png` loads from another machine
     on the LAN.
 
 ## The panel driver — code is written, hardware verification is not
@@ -164,6 +175,7 @@ send it in one write — not `cs_change`), and the exact refresh timing.
 
 ## Verify
 - [ ] SSH works over WiFi with no monitor ever attached.
+- [ ] `<hostname>.local` resolves from another machine after installing `avahi-daemon`.
 - [ ] `/dev/spidev0.0` exists after enabling the overlay and rebooting.
 - [ ] `cargo build --release` succeeds on-device.
 - [ ] `corkboard-device` systemd service starts on boot and survives a reboot.
