@@ -1,13 +1,13 @@
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { fetchStatus } from '@/lib/deviceApi'
 import type { DashboardStatus } from '@/lib/dashboardTypes'
 
-/** Polls `/api/status` on an interval; `status` stays at its last good value
- * while `unreachable` reflects only the most recent attempt. */
-export function useDeviceStatus(intervalMs = 5000) {
+/** Fetches `/api/status` once on load — no background polling, so an idle
+ * dashboard tab generates zero ongoing traffic to the device. Call
+ * `refresh()` again (e.g. from a button) to get a fresh snapshot. */
+export function useDeviceStatus() {
   const status = ref<DashboardStatus | null>(null)
   const unreachable = ref(false)
-  let timer: ReturnType<typeof setInterval> | undefined
 
   async function refresh() {
     const s = await fetchStatus()
@@ -15,11 +15,7 @@ export function useDeviceStatus(intervalMs = 5000) {
     if (s !== null) status.value = s
   }
 
-  onMounted(() => {
-    refresh()
-    timer = setInterval(refresh, intervalMs)
-  })
-  onUnmounted(() => clearInterval(timer))
+  onMounted(refresh)
 
-  return { status, unreachable }
+  return { status, unreachable, refresh }
 }

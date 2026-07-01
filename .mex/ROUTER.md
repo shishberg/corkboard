@@ -18,7 +18,7 @@ edges:
     condition: when setting up the dev environment or running the project for the first time
   - target: patterns/INDEX.md
     condition: when starting a task — check the pattern index for a matching pattern file
-last_updated: 2026-07-01
+last_updated: 2026-07-02
 ---
 
 # Session Bootstrap
@@ -89,16 +89,21 @@ render time, polls the feed, and re-renders only on semantic content change. **1
 - Parity guardrail (S4): `npm run test:parity` (Playwright) compares the editor surface screenshot
   vs `preview.png` on a coarse content-mask IoU (≥0.35; feedless doc → both use sample data).
 
-**Status dashboard (`GET /dashboard` + `GET /api/status`), built on the `device-dashboard` branch
-off `panel-driver`.** A self-contained HTML page (`device/src/dashboard.html`, inline CSS/JS, no
-build step) polling `/api/status` every 5s: live preview image (reusing the same long-poll
-pattern as `/preview`), last-rendered/last-published/last-poll timestamps, render count, connected
-preview long-poll listeners (`WebPreview::subscriber_count`, a proxy for "browsers watching now"),
+**Status dashboard (`GET /dashboard` + `GET /api/status`).** A Vue/Vite page (`src/DashboardApp.vue`,
+built as a second Vite entry point alongside the editor — not a self-contained HTML file, see
+`context/decisions.md`). Fetches `/api/status` **once on load**, plus a manual Refresh button — no
+background polling (2026-07-02: dropped the 5s `setInterval`, since an idle dashboard tab kept
+waking the device's CPU/WiFi radio out of deeper sleep for no reason). Shows: the live preview
+image (`<img src="/preview.png">`, no long-poll — the live-preview page and its `/preview/updates`
+long-poll endpoint were removed the same day; the editor's Preview button now just opens
+`/preview.png` in a new tab), last-rendered/last-published/last-poll timestamps, render count,
 per-feed calendar fetch status (ok/error, today's event count, human error text — never the
-secret URL), document page count + live page name, device platform (`std::env::consts::OS`/`ARCH`
-— distinguishes an Orange Pi from a Mac dev box) + which `Display` backend is active
-(`AppState::display_kind`, "panel" or "web-preview"), available fonts (+ which ship a bold face),
-the env vars/flags this run started with, and recent WARN/ERROR log lines. Log capture is a second
+secret URL) plus the next 7 days per feed, a system panel (CPU temp/freq/load-avg/memory from
+`device/src/sysstat.rs`, reading `/proc`+`/sys` directly — `None` off-Linux), document page count +
+live page name, device platform (`std::env::consts::OS`/`ARCH` — distinguishes an Orange Pi from a
+Mac dev box) + which `Display` backend is active (`AppState::display_kind`, "panel" or
+"web-preview"), available fonts (+ which ship a bold face), the env vars/flags this run started
+with, and recent WARN/ERROR log lines. Log capture is a second
 `tracing_subscriber` `Layer` (`device/src/logbuf.rs`'s `CaptureLayer`, filtered to `LevelFilter::WARN`)
 alongside the normal stdout `fmt` layer — copies into a capped in-memory ring buffer, no behaviour
 change to existing logging. Per-feed fetch results are tracked in `AppState::feed_status` (set

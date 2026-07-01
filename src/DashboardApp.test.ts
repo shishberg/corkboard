@@ -17,7 +17,7 @@ function sampleStatus(): DashboardStatus {
     pollIntervalMinutes: 60,
     feeds: [],
     document: { pageCount: 1, livePageId: 'p1', livePageName: 'Page 1', savedAtMs: null },
-    preview: { updatedAtMs: 0, renderCount: 0, connectedListeners: 0, lastPollAtMs: null },
+    preview: { updatedAtMs: 0, renderCount: 0, lastPollAtMs: null },
     display: { kind: 'web-preview', os: 'macos', arch: 'aarch64' },
     fonts: { defaultId: 'atkinson-hyperlegible', ids: ['atkinson-hyperlegible'], boldIds: ['atkinson-hyperlegible'] },
     env: { dataDir: './data', distDir: '../dist', fontsDir: '../public/fonts', port: '8080' },
@@ -90,6 +90,22 @@ describe('DashboardApp', () => {
     expect(w.text()).toContain('Standup')
     expect(w.text()).toContain('Bin day')
     expect(w.text()).toContain('HTTP 404')
+  })
+
+  it('fetches once on load and only again when Refresh is clicked', async () => {
+    const spy = vi.spyOn(deviceApi, 'fetchStatus').mockResolvedValue(sampleStatus())
+    const w = mount(DashboardApp)
+    await flushPromises()
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    vi.useFakeTimers()
+    await vi.advanceTimersByTimeAsync(20000)
+    vi.useRealTimers()
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    await w.get('[data-role="refresh"]').trigger('click')
+    await flushPromises()
+    expect(spy).toHaveBeenCalledTimes(2)
   })
 
   it('shows system stats when available', async () => {

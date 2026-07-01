@@ -32,7 +32,6 @@ export interface DocumentInfo {
 export interface PreviewInfo {
   updatedAtMs: number
   renderCount: number
-  connectedListeners: number
   lastPollAtMs: number | null
 }
 

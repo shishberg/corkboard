@@ -2,8 +2,6 @@ use std::io::Cursor;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use tokio::sync::watch;
-
 pub trait Display: Send + Sync {
     fn show(&self, png: &[u8]) -> anyhow::Result<()>;
 }
@@ -41,9 +39,6 @@ struct Frame {
 
 pub struct WebPreview {
     frame: std::sync::Mutex<Frame>,
-    /// Notifies long-pollers of a new render. The watched value is the latest
-    /// `updated_at`.
-    tx: watch::Sender<i64>,
     /// How many times `show` has been called. Tests use this to count renders
     /// without parsing timestamps.
     render_count: AtomicUsize,
@@ -51,13 +46,11 @@ pub struct WebPreview {
 
 impl WebPreview {
     pub fn new() -> Self {
-        let (tx, _rx) = watch::channel(0);
         WebPreview {
             frame: std::sync::Mutex::new(Frame {
                 updated_at: 0,
                 bytes: vec![],
             }),
-            tx,
             render_count: AtomicUsize::new(0),
         }
     }
@@ -73,7 +66,9 @@ impl WebPreview {
         }
     }
 
-    /// Timestamp of the last render (millis since epoch; 0 if never).
+    /// Timestamp of the last render (millis since epoch; 0 if never). Used by
+    /// tests; production code reads the timestamp via `current()`.
+    #[allow(dead_code)]
     pub fn updated_at(&self) -> i64 {
         self.frame.lock().unwrap().updated_at
     }
@@ -83,19 +78,6 @@ impl WebPreview {
     #[allow(dead_code)]
     pub fn render_count(&self) -> usize {
         self.render_count.load(Ordering::Relaxed)
-    }
-
-    /// Subscribe to render notifications. The receiver's value is the latest
-    /// `updated_at`; `changed()` resolves on the next render.
-    pub fn subscribe(&self) -> watch::Receiver<i64> {
-        self.tx.subscribe()
-    }
-
-    /// How many long-poll clients (`GET /preview/updates`) are currently
-    /// holding a receiver open — a proxy for "how many browsers are watching
-    /// the live preview right now", for the dashboard.
-    pub fn subscriber_count(&self) -> usize {
-        self.tx.receiver_count()
     }
 }
 
@@ -108,10 +90,6 @@ impl Display for WebPreview {
             frame.updated_at = now;
             frame.bytes = png.to_vec();
         }
-        // Store the new timestamp and wake any waiting long-pollers.
-        // `send_replace` updates the value even when no receiver is currently
-        // subscribed (unlike `send`, which no-ops with zero receivers).
-        self.tx.send_replace(now);
         Ok(())
     }
 }

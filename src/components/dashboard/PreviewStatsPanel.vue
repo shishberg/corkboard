@@ -19,10 +19,6 @@ defineProps<{ preview: PreviewInfo }>()
           <td>{{ preview.renderCount }}</td>
         </tr>
         <tr>
-          <td class="pr-4 text-neutral-500">Connected listeners</td>
-          <td>{{ preview.connectedListeners }}</td>
-        </tr>
-        <tr>
           <td class="pr-4 text-neutral-500">Last calendar poll</td>
           <td>{{ preview.lastPollAtMs ? formatAgo(preview.lastPollAtMs) : 'never' }}</td>
         </tr>

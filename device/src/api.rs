@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use axum::{
     body::Bytes,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::{HeaderValue, StatusCode},
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
     routing::{get, post, put},
     Json, Router,
 };
@@ -27,9 +27,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/feeds", put(put_feeds))
         .route("/api/refresh", post(refresh))
         .route("/api/status", get(get_status))
-        .route("/preview", get(preview_page))
         .route("/preview.png", get(preview_png))
-        .route("/preview/updates", get(preview_updates))
 }
 
 async fn get_document(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -132,14 +130,6 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     Json(status::build(&state))
 }
 
-/// Serve the live preview page: the current render, plus a script that
-/// long-polls `/preview/updates` and reloads the image when it changes.
-async fn preview_page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let updated_at = state.web_preview.updated_at();
-    let html = include_str!("preview.html").replace("__UPDATED_AT__", &updated_at.to_string());
-    Html(html)
-}
-
 /// Return the cached rendered PNG — does NOT re-render.
 async fn preview_png(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let (_updated_at, png) = state.web_preview.current();
@@ -148,35 +138,6 @@ async fn preview_png(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         .headers_mut()
         .insert("content-type", HeaderValue::from_static("image/png"));
     response
-}
-
-#[derive(serde::Deserialize)]
-struct UpdatesQuery {
-    /// Timestamp (millis since epoch) the client is currently showing.
-    since: Option<i64>,
-}
-
-/// Long-poll for a newer render. Blocks until the preview's `updated_at` is
-/// greater than `since` or a timeout elapses, then answers `{ updatedAt }`.
-/// Always 200: a timeout returns the (unchanged) current timestamp, so the
-/// client simply re-polls.
-async fn preview_updates(
-    State(state): State<Arc<AppState>>,
-    Query(q): Query<UpdatesQuery>,
-) -> impl IntoResponse {
-    let since = q.since.unwrap_or(0);
-    let mut rx = state.web_preview.subscribe();
-
-    // Fast path: a render newer than `since` already happened.
-    let current = *rx.borrow_and_update();
-    if current > since {
-        return Json(json!({ "updatedAt": current }));
-    }
-
-    // Otherwise wait for the next render, capped so the request doesn't hang
-    // past typical proxy/browser idle limits.
-    let _ = tokio::time::timeout(std::time::Duration::from_secs(25), rx.changed()).await;
-    Json(json!({ "updatedAt": *rx.borrow() }))
 }
 
 struct AppError(anyhow::Error);
@@ -521,71 +482,4 @@ mod tests {
         assert_eq!(body.as_ref(), cached.as_slice());
     }
 
-    #[tokio::test]
-    async fn preview_page_embeds_current_timestamp() {
-        let state = make_state();
-
-        // Render once so there's a non-zero timestamp to embed.
-        state.render_and_show().unwrap();
-        let ts = state.web_preview.updated_at();
-        assert!(ts > 0);
-
-        let req = Request::builder()
-            .method("GET")
-            .uri("/preview")
-            .body(axum::body::Body::empty())
-            .unwrap();
-        let resp = make_router(state.clone()).oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let body = resp.into_body().collect().await.unwrap().to_bytes();
-        let html = std::str::from_utf8(&body).unwrap();
-
-        // The placeholder is replaced with the real timestamp.
-        assert!(!html.contains("__UPDATED_AT__"));
-        assert!(html.contains(&ts.to_string()));
-    }
-
-    #[tokio::test]
-    async fn preview_updates_returns_immediately_when_newer_exists() {
-        let state = make_state();
-        state.render_and_show().unwrap();
-        let ts = state.web_preview.updated_at();
-
-        // Ask for anything older than the current render → answer at once.
-        let req = Request::builder()
-            .method("GET")
-            .uri("/preview/updates?since=0")
-            .body(axum::body::Body::empty())
-            .unwrap();
-        let resp = make_router(state.clone()).oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let body = resp.into_body().collect().await.unwrap().to_bytes();
-        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(v["updatedAt"].as_i64().unwrap(), ts);
-    }
-
-    #[tokio::test]
-    async fn preview_updates_wakes_on_render() {
-        let state = make_state();
-        state.render_and_show().unwrap();
-        let since = state.web_preview.updated_at();
-
-        // Hold the poll open with `since` == current, then render again.
-        let app = make_router(state.clone());
-        let req = Request::builder()
-            .method("GET")
-            .uri(format!("/preview/updates?since={since}"))
-            .body(axum::body::Body::empty())
-            .unwrap();
-        let poll = tokio::spawn(async move { app.oneshot(req).await.unwrap() });
-
-        // Ensure the poll is parked, then trigger a render that should wake it.
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        state.render_and_show().unwrap();
-
-        let resp = poll.await.unwrap();
-        let body = resp.into_body().collect().await.unwrap().to_bytes();
-        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(v["updatedAt"].as_i64().unwrap() >= since);
-    }
 }

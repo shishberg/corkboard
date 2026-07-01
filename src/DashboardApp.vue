@@ -10,7 +10,7 @@ import FeedsPanel from '@/components/dashboard/FeedsPanel.vue'
 import LogsPanel from '@/components/dashboard/LogsPanel.vue'
 import SystemPanel from '@/components/dashboard/SystemPanel.vue'
 
-const { status, unreachable } = useDeviceStatus()
+const { status, unreachable, refresh } = useDeviceStatus()
 </script>
 
 <template>
@@ -21,10 +21,13 @@ const { status, unreachable } = useDeviceStatus()
         <p v-if="status" class="text-sm text-neutral-500">
           {{ status.hostname }} · {{ status.display.os }}/{{ status.display.arch }}
         </p>
-        <p v-else-if="unreachable" class="text-sm text-red-600">device unreachable — retrying…</p>
+        <p v-else-if="unreachable" class="text-sm text-red-600">device unreachable</p>
         <p v-else class="text-sm text-neutral-500">loading…</p>
       </div>
-      <Button data-role="editor" as="a" href="/" variant="outline" size="sm">Editor</Button>
+      <div class="flex gap-2">
+        <Button data-role="refresh" variant="outline" size="sm" @click="refresh">Refresh</Button>
+        <Button data-role="editor" as="a" href="/" variant="outline" size="sm">Editor</Button>
+      </div>
     </header>
 
     <div v-if="status" class="columns-1 gap-4 sm:columns-2 xl:columns-3">

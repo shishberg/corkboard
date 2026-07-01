@@ -75,8 +75,6 @@ pub struct PreviewInfo {
     /// millis since epoch of the last render pushed to the display; 0 if none yet.
     pub updated_at_ms: i64,
     pub render_count: usize,
-    /// Long-poll clients (`GET /preview/updates`) currently connected.
-    pub connected_listeners: usize,
     pub last_poll_at_ms: Option<i64>,
 }
 
@@ -168,7 +166,6 @@ pub fn build(state: &AppState) -> DashboardStatus {
     let preview = PreviewInfo {
         updated_at_ms,
         render_count: state.web_preview.render_count(),
-        connected_listeners: state.web_preview.subscriber_count(),
         last_poll_at_ms: *state.last_poll_at_ms.lock().unwrap(),
     };
 

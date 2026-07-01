@@ -12,7 +12,7 @@ edges:
     condition: when a decision relates to system structure
   - target: context/stack.md
     condition: when a decision relates to technology choice
-last_updated: 2026-07-01
+last_updated: 2026-07-02
 ---
 
 # Decisions
@@ -22,9 +22,37 @@ last_updated: 2026-07-01
 
 ## Decision Log
 
+### Drop the dashboard's 5s poll and the live-preview long-poll page entirely
+**Date:** 2026-07-02
+**Status:** Active
+**Decision:** Removed `GET /preview` (`device/src/preview.html`) and `GET /preview/updates`
+(the long-poll endpoint) completely, along with `WebPreview`'s `tx: watch::Sender`/`subscribe()`/
+`subscriber_count()` plumbing and the dashboard's `connectedListeners` stat. The editor's Preview
+button now links straight to `/preview.png` (opens in a new tab) instead of the live-refreshing
+page. Also changed the dashboard (`useDeviceStatus.ts`) from a 5s `setInterval` poll of
+`/api/status` to a single fetch on load plus a manual Refresh button.
+**Reasoning:** investigating device idle power draw (see the power-tuning entries in
+`patterns/deploy-to-orange-pi.md`) found that periodic requests — even the already-efficient
+long-poll (25s timeout, holds the connection rather than reconnecting), and especially the
+dashboard's 5s interval — keep the CPU and WiFi radio out of deeper idle sleep states. Nobody was
+relying on the live-refreshing preview page in practice (a manually-reloaded `/preview.png` is
+enough for a diagnostic image), and the dashboard is a low-traffic status page an operator opens
+occasionally, not something that needs to stay live-updating in a background tab.
+**Alternatives considered:** pausing the dashboard poll via the Page Visibility API instead of
+removing it outright (raised, but the explicit call was to remove the background traffic
+entirely, not tune it); keeping the long-poll page but noting it's rarely used (rejected — simpler
+to delete unused surface area than carry it).
+**Consequences:** `WebPreview` keeps `current()`/`updated_at()`/`render_count()` (still used by
+`/preview.png` and the dashboard's render-count/last-rendered stats) but lost the watch-channel
+entirely. Three now-obsolete tests in `device/src/api.rs` (`preview_page_embeds_current_timestamp`,
+`preview_updates_returns_immediately_when_newer_exists`, `preview_updates_wakes_on_render`) were
+deleted rather than adapted. This partially supersedes the dashboard entry below: the "polls every
+5s" and "connected preview long-poll listener count" parts no longer apply.
+
 ### Device status dashboard: server-rendered snapshot endpoint, in-memory log ring buffer
 **Date:** 2026-07-01
-**Status:** Active
+**Status:** Active (partially superseded 2026-07-02 — see entry above: no more 5s polling, no more
+connected-listener count)
 **Decision:** Add `GET /dashboard` (a self-contained HTML page, inline CSS/JS, no build step,
 `device/src/dashboard.html`) and `GET /api/status` (JSON, `device/src/status.rs`) to the device
 server, on the `device-dashboard` branch off `panel-driver`. The page polls the status endpoint
