@@ -124,6 +124,44 @@ not part of this setup.
     `sudo systemctl daemon-reload && sudo systemctl enable --now corkboard-device`
 13. **Verify:** `http://<pi-ip-or-hostname>/preview.png` loads from another machine
     on the LAN.
+14. **Power tuning.** This board mostly sits idle serving an occasional request, so it's
+    worth keeping it out of high-power states. Prefer each subsystem's own persistence
+    mechanism over a custom unit:
+    - **CPU governor.** `sudo apt install -y cpufrequtils`, then set
+      `/etc/default/cpufrequtils`:
+      ```
+      GOVERNOR="ondemand"
+      ```
+      Applied to every core at boot by the package's own service — check
+      `scaling_available_governors` first and prefer `schedutil` if it's listed (newer,
+      generally better). Only matters if the current governor is `performance`; check
+      `cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` before assuming you need
+      this at all.
+    - **Bluetooth.** Just run `sudo rfkill block bluetooth` once, interactively.
+      `systemd-rfkill.service` (on by default on Debian/Armbian) saves that state on
+      shutdown and restores it on boot — no unit file needed.
+    - **WiFi power-save.** *If* NetworkManager manages the interface (`systemctl status
+      NetworkManager` — likely, since Armbian's own `armbian_first_run.txt` WiFi
+      pre-seeding goes through it on recent Debian images), add
+      `/etc/NetworkManager/conf.d/wifi-powersave.conf`:
+      ```ini
+      [connection]
+      wifi.powersave=3
+      ```
+      applied to every connection NM brings up, no unit needed. If the Pi instead uses
+      `wpa_supplicant`/`ifupdown` directly, there's no equivalent single config file —
+      fall back to a small oneshot unit running `iw dev wlan0 set power_save on` at boot
+      (interface name from `ip link`).
+
+      Safe for a server either way: the access point buffers frames while the radio
+      sleeps and delivers them at the next wake window (tied to the beacon interval,
+      typically ~100ms) — it doesn't drop the connection or ignore requests, just adds up
+      to ~100ms of latency to a request that lands mid-sleep.
+    - Dropping the frontend's 5s `/api/status` poll and the preview long-poll helps too:
+      each request wakes the CPU out of deeper idle (C-states) and the WiFi radio out of
+      power-save sleep to answer it. It costs no real CPU time, but it does block the
+      deeper sleep states that actually save power — these settings only get their full
+      benefit once the device isn't polled every few seconds.
 
 ## The panel driver — code is written, hardware verification is not
 `device/src/panel.rs` implements `Display` for the real Waveshare 7.3" E6, ported
@@ -180,6 +218,8 @@ send it in one write — not `cs_change`), and the exact refresh timing.
 - [ ] `cargo build --release` succeeds on-device.
 - [ ] `corkboard-device` systemd service starts on boot and survives a reboot.
 - [ ] `/preview.png` is reachable from another machine on the LAN.
+- [ ] Power tuning survives a reboot: governor still `ondemand`/`schedutil`, WiFi
+  power-save still on, Bluetooth still blocked.
 - [ ] Panel driver (`Display` impl beyond `WebPreview`) — separate, not yet done.
 
 ## Debug

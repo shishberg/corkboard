@@ -21,6 +21,7 @@ pub struct DashboardStatus {
     pub fonts: FontsInfo,
     pub env: EnvInfo,
     pub logs: Vec<crate::logbuf::LogEntry>,
+    pub system: crate::sysstat::SystemInfo,
 }
 
 #[derive(Serialize)]
@@ -209,6 +210,7 @@ pub fn build(state: &AppState) -> DashboardStatus {
         fonts,
         env,
         logs: state.logs.snapshot(),
+        system: crate::sysstat::snapshot(),
     }
 }
 

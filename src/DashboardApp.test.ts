@@ -22,6 +22,15 @@ function sampleStatus(): DashboardStatus {
     fonts: { defaultId: 'atkinson-hyperlegible', ids: ['atkinson-hyperlegible'], boldIds: ['atkinson-hyperlegible'] },
     env: { dataDir: './data', distDir: '../dist', fontsDir: '../public/fonts', port: '8080' },
     logs: [],
+    system: {
+      cpuTempC: null,
+      loadAvg1: null,
+      loadAvg5: null,
+      loadAvg15: null,
+      cpuFreqMhz: null,
+      memTotalKb: null,
+      memAvailableKb: null,
+    },
   }
 }
 
@@ -81,5 +90,24 @@ describe('DashboardApp', () => {
     expect(w.text()).toContain('Standup')
     expect(w.text()).toContain('Bin day')
     expect(w.text()).toContain('HTTP 404')
+  })
+
+  it('shows system stats when available', async () => {
+    const status = sampleStatus()
+    status.system = {
+      cpuTempC: 42.8,
+      loadAvg1: 0.52,
+      loadAvg5: 0.58,
+      loadAvg15: 0.59,
+      cpuFreqMhz: 1008,
+      memTotalKb: 1998960,
+      memAvailableKb: 512340,
+    }
+    vi.spyOn(deviceApi, 'fetchStatus').mockResolvedValue(status)
+    const w = mount(DashboardApp)
+    await flushPromises()
+    expect(w.text()).toContain('42.8°C')
+    expect(w.text()).toContain('1008 MHz')
+    expect(w.text()).toContain('0.52')
   })
 })

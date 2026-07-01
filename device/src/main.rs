@@ -14,6 +14,7 @@ mod sample;
 mod state;
 mod status;
 mod storage;
+mod sysstat;
 mod text;
 
 use std::sync::Arc;

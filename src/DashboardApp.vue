@@ -8,6 +8,7 @@ import DevicePanel from '@/components/dashboard/DevicePanel.vue'
 import FontsPanel from '@/components/dashboard/FontsPanel.vue'
 import FeedsPanel from '@/components/dashboard/FeedsPanel.vue'
 import LogsPanel from '@/components/dashboard/LogsPanel.vue'
+import SystemPanel from '@/components/dashboard/SystemPanel.vue'
 
 const { status, unreachable } = useDeviceStatus()
 </script>
@@ -31,6 +32,7 @@ const { status, unreachable } = useDeviceStatus()
       <div class="mb-4 break-inside-avoid"><PreviewStatsPanel :preview="status.preview" /></div>
       <div class="mb-4 break-inside-avoid"><DocumentPanel :document="status.document" /></div>
       <div class="mb-4 break-inside-avoid"><DevicePanel :status="status" /></div>
+      <div class="mb-4 break-inside-avoid"><SystemPanel :system="status.system" /></div>
       <div class="mb-4 break-inside-avoid"><FontsPanel :fonts="status.fonts" /></div>
       <div class="mb-4 break-inside-avoid"><FeedsPanel :feeds="status.feeds" /></div>
       <div class="mb-4 break-inside-avoid"><LogsPanel :logs="status.logs" /></div>

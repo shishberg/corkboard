@@ -62,6 +62,16 @@ export interface LogEntry {
   message: string
 }
 
+export interface SystemInfo {
+  cpuTempC: number | null
+  loadAvg1: number | null
+  loadAvg5: number | null
+  loadAvg15: number | null
+  cpuFreqMhz: number | null
+  memTotalKb: number | null
+  memAvailableKb: number | null
+}
+
 export interface DashboardStatus {
   nowMs: number
   startedAtMs: number
@@ -75,4 +85,5 @@ export interface DashboardStatus {
   fonts: FontsInfo
   env: EnvInfo
   logs: LogEntry[]
+  system: SystemInfo
 }
