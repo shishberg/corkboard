@@ -95,7 +95,7 @@ not part of this setup.
    (`context/protocol.md`).
 11. **Build the device server:** `cd ~/corkboard/device && cargo build --release` →
     binary at `device/target/release/corkboard-device`.
-12. **systemd service** — `/etc/systemd/system/corkboard-device.service`:
+12. **systemd service** — `/etc/systemd/system/corkboard.service`:
     ```ini
     [Unit]
     Description=Corkboard device server
@@ -121,42 +121,72 @@ not part of this setup.
     ```
     Use absolute paths in the unit — unlike running `cargo run` from `device/`, systemd
     doesn't give you the `../dist`/`../public/fonts` relative defaults for free.
-    `sudo systemctl daemon-reload && sudo systemctl enable --now corkboard-device`
+    `sudo systemctl daemon-reload && sudo systemctl enable --now corkboard`
 13. **Verify:** `http://<pi-ip-or-hostname>/preview.png` loads from another machine
     on the LAN.
 14. **Power tuning.** This board mostly sits idle serving an occasional request, so it's
     worth keeping it out of high-power states. Prefer each subsystem's own persistence
-    mechanism over a custom unit:
-    - **CPU governor.** `sudo apt install -y cpufrequtils`, then set
-      `/etc/default/cpufrequtils`:
+    mechanism over a custom unit — but on Armbian 26.8 trixie (the image this was actually
+    verified against, on `calcifer`), neither the CPU governor nor the WiFi radio has one
+    available, so both need a small oneshot unit:
+    - **CPU governor.** `cpufrequtils` isn't packaged on trixie (no installation
+      candidate). Its replacement, `sudo apt install -y linux-cpupower`, ships only the
+      `cpupower` CLI — no `/etc/default/...` config file or boot-time service. Pin it with
+      `/etc/systemd/system/corkboard-cpu-governor.service`:
+      ```ini
+      [Unit]
+      Description=Pin the CPU frequency governor to ondemand (idle diagnostic device)
+      After=multi-user.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/bin/cpupower frequency-set -g ondemand
+
+      [Install]
+      WantedBy=multi-user.target
       ```
-      GOVERNOR="ondemand"
-      ```
-      Applied to every core at boot by the package's own service — check
-      `scaling_available_governors` first and prefer `schedutil` if it's listed (newer,
-      generally better). Only matters if the current governor is `performance`; check
-      `cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` before assuming you need
-      this at all.
-    - **Bluetooth.** Just run `sudo rfkill block bluetooth` once, interactively.
-      `systemd-rfkill.service` (on by default on Debian/Armbian) saves that state on
-      shutdown and restores it on boot — no unit file needed.
+      Check `scaling_available_governors` first and prefer `schedutil` if it's listed
+      (newer, generally better) — on `calcifer` the default was already `ondemand`, so this
+      unit just guarantees it survives a kernel/image update that might reset it.
+    - **Bluetooth.** `rfkill` is already installed (part of `util-linux`, lives in
+      `/usr/sbin` — not on a non-interactive SSH session's `$PATH`, so use the full path or
+      `sudo rfkill`). Just run `sudo /usr/sbin/rfkill block bluetooth` once, interactively.
+      `systemd-rfkill.socket` (static-enabled by default) saves that state on shutdown and
+      restores it on boot — no unit file needed.
     - **WiFi power-save.** *If* NetworkManager manages the interface (`systemctl status
-      NetworkManager` — likely, since Armbian's own `armbian_first_run.txt` WiFi
-      pre-seeding goes through it on recent Debian images), add
-      `/etc/NetworkManager/conf.d/wifi-powersave.conf`:
+      NetworkManager`), add `/etc/NetworkManager/conf.d/wifi-powersave.conf`:
       ```ini
       [connection]
       wifi.powersave=3
       ```
-      applied to every connection NM brings up, no unit needed. If the Pi instead uses
-      `wpa_supplicant`/`ifupdown` directly, there's no equivalent single config file —
-      fall back to a small oneshot unit running `iw dev wlan0 set power_save on` at boot
-      (interface name from `ip link`).
+      applied to every connection NM brings up, no unit needed. On `calcifer` the network
+      stack is netplan + `systemd-networkd` + `wpa_supplicant` (NetworkManager isn't
+      running), so there's no equivalent single config file — used the fallback instead:
+      `sudo apt install -y iw`, then `/etc/systemd/system/corkboard-wifi-powersave.service`:
+      ```ini
+      [Unit]
+      Description=Enable WiFi power-save on wlan0 (idle diagnostic device)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/iw dev wlan0 set power_save on
+
+      [Install]
+      WantedBy=multi-user.target
+      ```
+      (Interface name confirmed with `ip link` — `wlan0` here.)
 
       Safe for a server either way: the access point buffers frames while the radio
       sleeps and delivers them at the next wake window (tied to the beacon interval,
       typically ~100ms) — it doesn't drop the connection or ignore requests, just adds up
       to ~100ms of latency to a request that lands mid-sleep.
+    - Enable both units: `sudo systemctl daemon-reload && sudo systemctl enable --now
+      corkboard-cpu-governor corkboard-wifi-powersave`. Verify with `cat
+      .../scaling_governor` and `iw dev wlan0 get power_save`.
     - Dropping the frontend's 5s `/api/status` poll and the preview long-poll helps too:
       each request wakes the CPU out of deeper idle (C-states) and the WiFi radio out of
       power-save sleep to answer it. It costs no real CPU time, but it does block the
@@ -192,7 +222,7 @@ To actually drive the panel once it's wired to the board:
    is required for this carrier board — a missing value is a hard error, not a silent "no
    gate"; only set `CORKBOARD_PANEL_NO_PWR=1` instead if driving a bare HAT with no power
    gate.)
-3. Watch `journalctl -u corkboard-device -f` on the first render — a wrong BUSY line
+3. Watch `journalctl -u corkboard -f` on the first render — a wrong BUSY line
    number will surface as `panel BUSY line never went idle within 120s`.
 
 What's still unverified against real hardware (can't be resolved without the physical
@@ -216,7 +246,7 @@ send it in one write — not `cs_change`), and the exact refresh timing.
 - [ ] `<hostname>.local` resolves from another machine after installing `avahi-daemon`.
 - [ ] `/dev/spidev0.0` exists after enabling the overlay and rebooting.
 - [ ] `cargo build --release` succeeds on-device.
-- [ ] `corkboard-device` systemd service starts on boot and survives a reboot.
+- [ ] `corkboard` systemd service starts on boot and survives a reboot.
 - [ ] `/preview.png` is reachable from another machine on the LAN.
 - [ ] Power tuning survives a reboot: governor still `ondemand`/`schedutil`, WiFi
   power-save still on, Bluetooth still blocked.
@@ -225,7 +255,7 @@ send it in one write — not `cs_change`), and the exact refresh timing.
 ## Debug
 - Can't SSH in: check `armbian_first_run.txt` for typos before reflashing; check the
   router's DHCP leases for the new device.
-- Service won't start: `journalctl -u corkboard-device -e`; most likely cause is a wrong
+- Service won't start: `journalctl -u corkboard -e`; most likely cause is a wrong
   or relative `CORKBOARD_*` path in the unit file.
 - Build fails: missing `build-essential`/`pkg-config` (needed for `freetype-rs`'s bundled
   C build).
