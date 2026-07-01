@@ -33,6 +33,29 @@ impl Colour {
             Colour::Green => [40, 160, 70],
         }
     }
+
+    pub const ALL: [Colour; 6] = [
+        Colour::Black,
+        Colour::White,
+        Colour::Red,
+        Colour::Yellow,
+        Colour::Blue,
+        Colour::Green,
+    ];
+
+    /// The 4-bit colour code the Waveshare 7.3" E6 (Spectra 6) controller
+    /// expects, per Waveshare's own `epd7in3e` driver (0x4 is unused by the
+    /// panel, not a gap we introduced).
+    pub fn panel_code(&self) -> u8 {
+        match self {
+            Colour::Black => 0x0,
+            Colour::White => 0x1,
+            Colour::Yellow => 0x2,
+            Colour::Red => 0x3,
+            Colour::Blue => 0x5,
+            Colour::Green => 0x6,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

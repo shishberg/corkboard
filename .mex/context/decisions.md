@@ -12,7 +12,7 @@ edges:
     condition: when a decision relates to system structure
   - target: context/stack.md
     condition: when a decision relates to technology choice
-last_updated: 2026-06-28
+last_updated: 2026-07-01
 ---
 
 # Decisions
@@ -21,6 +21,24 @@ last_updated: 2026-06-28
      new entry above it. The history is the event clock. -->
 
 ## Decision Log
+
+### Panel driver: `spidev` + `gpio-cdev`, one-shot port of Waveshare's `epd7in3e` demo
+**Date:** 2026-07-01
+**Status:** Active — written + heavily reviewed; untested against real hardware (panel not in hand)
+**Decision:** `device/src/panel.rs` implements `Display` for the Waveshare 7.3" E6 using `spidev` (SPI0, 4 MHz, mode 0) and `gpio-cdev` (RST/DC/BUSY + an optional PWR line for the PhotoPainter carrier board's power switch). The register sequence, reset/busy timing, and 4-bit colour codes (BLACK=0x0, WHITE=0x1, YELLOW=0x2, RED=0x3, BLUE=0x5, GREEN=0x6) are a byte-for-byte port of Waveshare's own Python `epd7in3e` driver — verified register-identical against the canonical `waveshareteam/e-Paper` repo (only cosmetic `buf_6color`/`buf_7color` naming differs from the PhotoPainter-kit copy we started from). Linux-only hardware access sits behind `GpioLine`/`SpiBus` trait seams so the driver logic compiles and unit-tests on any host; only `Panel::open` is `#[cfg(target_os = "linux")]`-gated (verified to type-check for `aarch64-unknown-linux-gnu`). `main.rs` selects `Panel` only on `CORKBOARD_DISPLAY=panel`, fanned out with `WebPreview` via `display::Fanout` so `/preview.png` keeps working.
+**Architecture — one-shot per render:** each `show()` drives the panel as a self-contained one-shot — `reset → init (register config + POWER_ON) → send frame + refresh + POWER_OFF → DEEP_SLEEP` — exactly how Waveshare's demo and PaperPiAI use this hardware (`init(); display(); sleep()` per image). The leading hardware reset re-establishes controller state from scratch every render, so there's no cross-render state to protect (no fault latch, no persistent-power bookkeeping). Sole safety net: `show()` runs the render and on *any* error runs `emergency_power_off` before returning — best-effort SPI POWER_OFF *plus* a hard PWR-gate drop (RST/DC driven low first) that still cuts the high-voltage rail when SPI itself is the failure. To keep that stateless, every render re-asserts PWR at the top (`power_up`), so a failure that left PWR low is recovered by the next render rather than tracked. We reached this only after first building a persistent-daemon version (init-once + power-cycle-per-render) and layering a fault latch + a `with_rail_powered` scope guard to plug the rail-safety holes that model created — switching to one-shot *dissolved* all that machinery (the daemon model was the root cause; neither reference uses it). ~26 focused unit tests behind fakes.
+**Reasoning:** Porting Waveshare's own logic verbatim removes the main risk of hand-writing e-paper protocol from memory. `spidev`/`gpio-cdev` are pure-Rust ioctl wrappers needing nothing beyond the kernel's `/dev/spidev*`/`/dev/gpiochip*` cdevs. One-shot-per-render inherits the references' proven choreography and self-corrects via reset, instead of inventing a persistent-state model we'd have to prove safe.
+**Alternatives considered:** `linux-embedded-hal` (unneeded abstraction layer); hand-writing the protocol from memory (rejected — the failure mode the port avoids); the persistent-daemon power model (built, then rejected as the source of the rail-safety complexity).
+**Consequences — still unverified until the panel is wired to the board:** (1) **GPIO chip/line numbers** — Waveshare's BCM numbers (RST=17, DC=25, BUSY=24, PWR=27) are Raspberry Pi-specific and don't transfer to the Allwinner H618, so `PanelConfig::from_env` requires `CORKBOARD_PANEL_*` env vars with no defaults (a set-but-non-Unicode var errors rather than being treated as unset). PWR specifically is *not* silently optional: a missing `CORKBOARD_PANEL_PWR_LINE` is a hard error unless `CORKBOARD_PANEL_NO_PWR=1` explicitly opts out (bare HAT), so a forgotten var can't run a carrier-board panel unpowered. Resolve line numbers with `gpioinfo` per `.mex/patterns/deploy-to-orange-pi.md`. (2) **C-vs-Python `0x06` discrepancy** — the C demo repeats command `0x06` ("Second setting") between POWER_ON and DISPLAY_REFRESH; the Python demo we follow doesn't (true in the canonical repo too) — first suspect if a real panel won't refresh. (3) **Framebuffer transfer** — sent as plain chunked `write_all` (an earlier `cs_change` trick was backwards per the `spidev` docs and was removed); believed safe (matches Python `writebytes2`) but chunked-vs-single-transfer frame integrity is untested (fix if needed: raise kernel `spidev.bufsiz`, send in one write). (4) **Ordering** — in `open()` PWR is asserted before SPI is opened and before RST/DC are claimed, so nothing drives an unpowered panel; each render re-asserts PWR (`power_up`) before its reset. (5) **Shutdown** — on render *failure* `emergency_power_off` hard-cuts PWR (a residual: SPI CS/SCLK may idle high against the unpowered panel until the next render's `power_up` — mild, same as the brief power-up window, not the acute HV hazard). On *success* PWR stays asserted between renders (panel in deep sleep) and is not de-asserted at process shutdown (needs graceful-shutdown wiring; deep sleep draws almost nothing).
+**Review history:** hardened across five codex + Opus passes (correctness vs the Waveshare reference, hardware-safety, readability, final simplification). The decisive finding: model each render as a one-shot so the reset makes cross-render safety machinery unnecessary. The fifth pass drove three follow-ups on the one-shot code: `emergency_power_off` now hard-cuts PWR (not just a best-effort SPI POWER_OFF) with a stateless per-render `power_up`; a missing PWR var is a hard error unless explicitly opted out; added tests for the frame-write failure path, PWR assert/drop, and a full happy-path command skeleton.
+
+### Host OS: Armbian (Debian) — over Orange Pi OS (Arch)
+**Date:** 2026-07-01
+**Status:** Active
+**Decision:** Flash Armbian's Debian image to the Orange Pi Zero 2W. Runs headless, SSH-only, no keyboard/mouse/GUI.
+**Reasoning:** Armbian has more mature mainline kernel support for the H618, better-tested SPI/GPIO handling, and a stable apt/Debian base — better fit for a headless appliance flashed once and left running unattended.
+**Alternatives considered:** Orange Pi OS (Arch) — rejected; rolling-release updates add unnecessary churn/risk for an appliance, and community support for this board is thinner than Armbian's.
+**Consequences:** Resolves the `[TO BE DETERMINED]` OS entry in `context/hardware.md`. Setup docs (SSH access, Rust toolchain install, systemd service, SPI/GPIO enablement) should target Armbian/Debian conventions (`armbian-config`, `apt`, `/boot/armbianEnv.txt` overlays).
 
 ### Device text rendering: FreeType monochrome (hinted) — SUPERSEDES `ab_glyph`
 **Date:** 2026-06-28
@@ -115,4 +133,4 @@ last_updated: 2026-06-28
 These are not yet decided — record them as proper entries above once made:
 - (none open — the round-two device design resolved the previous three: hosting, persistence, and the schema/endpoints. See the 2026-06-27 entries above and `context/protocol.md`.)
 - Renderer crate choices (raster, text shaping, ICS parse, image decode) — to be recorded when the renderer is implemented.
-- OS for the Orange Pi Zero 2W — some lightweight Linux, not yet chosen (`context/hardware.md`).
+- Real GPIO chip/line numbers for RST/DC/BUSY/PWR on the Orange Pi Zero 2W — not yet known (Waveshare's own BCM pin numbers don't carry over from the Raspberry Pi; needs `gpioinfo` against the physical board once the panel is wired up).

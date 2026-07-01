@@ -1,10 +1,36 @@
 use std::io::Cursor;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use tokio::sync::watch;
 
 pub trait Display: Send + Sync {
     fn show(&self, png: &[u8]) -> anyhow::Result<()>;
+}
+
+/// Fans a render out to multiple `Display`s. Used so the physical panel and
+/// the browser-facing `WebPreview` both get every render — `/preview.png`
+/// stays useful for checking what should be on the wall even when the panel
+/// is the "real" display.
+///
+/// Order matters: `main.rs` puts `WebPreview` before `Panel`, so a failed
+/// panel render still leaves `/preview.png` showing the frame that *should*
+/// be on the wall, even though it isn't there yet — useful for spotting
+/// "the render pipeline is fine, the panel isn't" while debugging. The
+/// accepted tradeoff is that `/preview.png` can briefly show a frame the
+/// physical panel doesn't have yet if the panel call then fails or hangs
+/// (the panel's own 120s BUSY timeout, see `panel.rs`). Reversing the order
+/// would fix that but block preview updates behind a possible panel hang,
+/// which is worse for the common case (working panel).
+pub struct Fanout(pub Vec<Arc<dyn Display>>);
+
+impl Display for Fanout {
+    fn show(&self, png: &[u8]) -> anyhow::Result<()> {
+        for d in &self.0 {
+            d.show(png)?;
+        }
+        Ok(())
+    }
 }
 
 struct Frame {

@@ -24,6 +24,13 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 chrono = "0.4"
 freetype-rs = { version = "0.38.0", features = ["bundled"] }
 
+# Linux-only: the SPI/GPIO panel driver. Kept out of the default
+# [dependencies] so `cargo build`/`cargo test` keep working on a dev Mac,
+# which never compiles `src/panel.rs` (see its `#[cfg(target_os = "linux")]`).
+[target.'cfg(target_os = "linux")'.dependencies]
+spidev = "0.7"
+gpio-cdev = "0.6"
+
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 tempfile = "3"

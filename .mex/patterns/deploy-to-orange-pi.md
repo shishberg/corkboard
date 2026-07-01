@@ -1,0 +1,174 @@
+---
+name: deploy-to-orange-pi
+description: Flash Armbian onto the Orange Pi Zero 2W, get headless SSH access over WiFi (no keyboard/mouse/GUI), build and run the device server as a systemd service. Ends where the physical panel driver work begins.
+triggers:
+  - "orange pi"
+  - "armbian"
+  - "flash"
+  - "headless"
+  - "systemd"
+  - "deploy"
+  - "sd card"
+edges:
+  - target: context/hardware.md
+    condition: for the panel model, SPI interface, and OS choice this runbook assumes
+  - target: context/decisions.md
+    condition: for why Armbian (Debian) was chosen over Orange Pi OS (Arch)
+  - target: context/setup.md
+    condition: for the dev-machine toolchain (Node, Rust) this runbook builds on
+last_updated: 2026-07-01
+---
+
+# Deploy the Device Server to the Orange Pi Zero 2W (Armbian, headless)
+
+## Context
+Target: Orange Pi Zero 2W running Armbian (Debian), **SSH-only** — no monitor, keyboard,
+or GUI ever touches it. This runbook gets from a blank microSD card to the device server
+running as a systemd service and serving `/preview.png` over the LAN. It stops there —
+driving the physical Waveshare 7.3" E6 panel needs a new `Display` impl in
+`device/src/display.rs` (today there's only `WebPreview`); that's separate coding work,
+not part of this setup.
+
+## Steps
+
+1. **Flash Armbian.** Download the Armbian **Debian** (Bookworm) image for Orange Pi
+   Zero 2W and flash it to a microSD card (balenaEtcher, Raspberry Pi Imager, or `dd`).
+2. **Pre-seed WiFi + headless boot** — do this before first boot, while the card is
+   still mounted on your dev machine. On the boot partition, copy
+   `armbian_first_run.txt.template` to `armbian_first_run.txt` and set:
+   ```
+   FR_general_delete_this_file_after_completion=1
+   FR_net_change_defaults=1
+   FR_net_wifi_enabled=1
+   FR_net_wifi_ssid='<your SSID>'
+   FR_net_wifi_key='<your password>'
+   FR_net_wifi_countrycode='<your country code>'
+   ```
+   This runs once on first boot, joins the network, and deletes itself. SSH is on by
+   default on Armbian images — no separate step needed.
+3. **Boot it and find its IP.** Check your router's DHCP client list, or
+   `nmap -sn <your-subnet>/24`, or try `ssh root@orangepizero2w.local` if mDNS resolves.
+4. **First SSH login.** `ssh root@<ip>`. Armbian forces a root password change on first
+   login and walks you through creating a non-root user — use that user (with sudo) from
+   here on.
+5. `sudo apt update && sudo apt full-upgrade -y`
+6. **Enable SPI.** `sudo armbian-config` → *System* → *Hardware* → enable the
+   `spi-spidev` overlay (or add it under `overlays=` in `/boot/armbianEnv.txt`
+   directly). Reboot, then confirm `/dev/spidev0.0` exists.
+7. **Install build deps:** `sudo apt install -y git build-essential pkg-config` —
+   `freetype-rs`'s `bundled` feature compiles FreeType from C source, so a compiler is
+   required.
+8. **Install Rust:** `curl https://sh.rustup.rs -sSf | sh`, then
+   `source "$HOME/.cargo/env"`. Native on-device build is simplest — no cross-compile
+   target is set up. It's slow on a quad-core A53 (FreeType compiles from source; expect
+   several minutes on the first build) but only needs to happen when the Rust code
+   changes.
+9. **Get the code across.** The editor (`npm run build`) doesn't need to run on the Pi —
+   build `dist/` on your dev machine and skip installing Node there. Two ways to land
+   files:
+   - `git clone` the repo directly on the Pi (needs a remote), then `rsync` just the
+     freshly-built `dist/` from your dev machine over the top, or
+   - `rsync -av --exclude target --exclude node_modules --exclude .git ./ pi@<ip>:~/corkboard/`
+     from your dev machine, having run `npm run build` first so `dist/` is included.
+
+   Either way, also copy `device/data/config.json` **out of band** (scp, not git) — it
+   holds the real secret iCal feed URL, which must never enter git history
+   (`context/protocol.md`).
+10. **Build the device server:** `cd ~/corkboard/device && cargo build --release` →
+    binary at `device/target/release/corkboard-device`.
+11. **systemd service** — `/etc/systemd/system/corkboard-device.service`:
+    ```ini
+    [Unit]
+    Description=Corkboard device server
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    Type=simple
+    User=pi
+    WorkingDirectory=/home/pi/corkboard/device
+    Environment=CORKBOARD_DIST=/home/pi/corkboard/dist
+    Environment=CORKBOARD_FONTS=/home/pi/corkboard/public/fonts
+    Environment=CORKBOARD_DATA=/home/pi/corkboard/device/data
+    ExecStart=/home/pi/corkboard/device/target/release/corkboard-device
+    Restart=on-failure
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+    Use absolute paths in the unit — unlike running `cargo run` from `device/`, systemd
+    doesn't give you the `../dist`/`../public/fonts` relative defaults for free.
+    `sudo systemctl daemon-reload && sudo systemctl enable --now corkboard-device`
+12. **Verify:** `http://<pi-ip-or-hostname>:8080/preview.png` loads from another machine
+    on the LAN.
+
+## The panel driver — code is written, hardware verification is not
+`device/src/panel.rs` implements `Display` for the real Waveshare 7.3" E6, ported
+byte-for-byte from Waveshare's own `epd7in3e` demo (from the PhotoPainter kit's demo zip:
+https://www.waveshare.com/wiki/RPi_Zero_PhotoPainter). It's Linux-only
+(`#[cfg(target_os = "linux")]`, and `spidev`/`gpio-cdev` are Linux-only Cargo
+dependencies), so it doesn't affect building/testing on a dev Mac. See
+`context/decisions.md`'s "Panel driver" entry for the full rationale.
+
+To actually drive the panel once it's wired to the board:
+1. Find the real GPIO chip and line numbers for RST, DC, BUSY (and PWR, since this build
+   uses the PhotoPainter carrier board, not a bare HAT) with `gpioinfo` — Waveshare's own
+   BCM pin numbers (RST=17, DC=25, BUSY=24, PWR=27) are Raspberry Pi-specific and do not
+   carry over to the Orange Pi's Allwinner H618, even though the 40-pin header is
+   physically compatible. `PanelConfig::from_env` deliberately has no hardcoded pin
+   defaults — it errors clearly if these aren't set, rather than risk silently driving the
+   wrong line.
+2. Add to the systemd unit's `[Service]` section:
+   ```ini
+   Environment=CORKBOARD_DISPLAY=panel
+   Environment=CORKBOARD_PANEL_GPIOCHIP=/dev/gpiochipN
+   Environment=CORKBOARD_PANEL_RST_LINE=<n>
+   Environment=CORKBOARD_PANEL_DC_LINE=<n>
+   Environment=CORKBOARD_PANEL_BUSY_LINE=<n>
+   Environment=CORKBOARD_PANEL_PWR_LINE=<n>
+   ```
+   (`CORKBOARD_PANEL_SPI` defaults to `/dev/spidev0.0` if unset. `CORKBOARD_PANEL_PWR_LINE`
+   is required for this carrier board — a missing value is a hard error, not a silent "no
+   gate"; only set `CORKBOARD_PANEL_NO_PWR=1` instead if driving a bare HAT with no power
+   gate.)
+3. Watch `journalctl -u corkboard-device -f` on the first render — a wrong BUSY line
+   number will surface as `panel BUSY line never went idle (timed out after 120s)`.
+
+What's still unverified against real hardware (can't be resolved without the physical
+panel): whether the chunked SPI transfer of the 192,000-byte framebuffer refreshes
+cleanly (the driver sends plain chunked `write_all`, matching `python-spidev`'s
+`writebytes2`; the fix if a frame ever tears is to raise the kernel's `spidev.bufsiz` and
+send it in one write — not `cs_change`), and the exact refresh timing.
+
+## Gotchas
+- `armbian_first_run.txt` only runs once and deletes itself — get the WiFi block right
+  before first boot, or re-mount the card and redo it.
+- The SPI overlay needs a reboot to take effect; the future panel driver silently can't
+  find `/dev/spidev0.0` if you skip this.
+- systemd doesn't inherit the relative-path env var defaults `cargo run` gives you from
+  `device/` — always set `CORKBOARD_DIST`/`CORKBOARD_FONTS`/`CORKBOARD_DATA` as absolute
+  paths in the unit file.
+- Never let `device/data/config.json` (real feed secret URL) go through git.
+
+## Verify
+- [ ] SSH works over WiFi with no monitor ever attached.
+- [ ] `/dev/spidev0.0` exists after enabling the overlay and rebooting.
+- [ ] `cargo build --release` succeeds on-device.
+- [ ] `corkboard-device` systemd service starts on boot and survives a reboot.
+- [ ] `/preview.png` is reachable from another machine on the LAN.
+- [ ] Panel driver (`Display` impl beyond `WebPreview`) — separate, not yet done.
+
+## Debug
+- Can't SSH in: check `armbian_first_run.txt` for typos before reflashing; check the
+  router's DHCP leases for the new device.
+- Service won't start: `journalctl -u corkboard-device -e`; most likely cause is a wrong
+  or relative `CORKBOARD_*` path in the unit file.
+- Build fails: missing `build-essential`/`pkg-config` (needed for `freetype-rs`'s bundled
+  C build).
+
+## Update Scaffold
+- [ ] Once the panel is wired up and lit for real, resolve the remaining `[UNVERIFIED]`
+  items in `context/hardware.md` (GPIO chip/line numbers, refresh timing, CS-across-chunks
+  behaviour) and update the "Panel driver" entry in `context/decisions.md`.
+- [ ] Update `.mex/ROUTER.md` "Current Project State" once the hardware deploy is done
+  end-to-end (panel actually lit up, not just the web preview).

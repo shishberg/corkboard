@@ -4,6 +4,10 @@ mod config;
 mod display;
 mod document;
 mod fonts;
+// `Panel::open` (the only part that touches real hardware) is gated to
+// `target_os = "linux"` inside the module itself — the module is compiled
+// everywhere so its unit tests run on any host, not just Linux.
+mod panel;
 mod render;
 mod sample;
 mod state;
@@ -14,7 +18,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::{extract::Request, middleware::Next, response::Response};
 use calendar::CalendarData;
-use display::WebPreview;
+use display::{Display, WebPreview};
 use fonts::Fonts;
 use state::AppState;
 use storage::Storage;
@@ -58,11 +62,37 @@ async fn main() {
     let preview = Arc::new(WebPreview::new());
     let fonts = Arc::new(Fonts::load());
 
+    // `CORKBOARD_DISPLAY=panel` drives the real e-paper panel (Linux only —
+    // see src/panel.rs). Anything else (including running on macOS) keeps
+    // using the web preview. When the panel is active it's fanned out
+    // alongside the preview so `/preview.png` stays useful without walking
+    // over to the wall. See .mex/patterns/deploy-to-orange-pi.md.
+    let display: Arc<dyn Display> = {
+        #[cfg(target_os = "linux")]
+        {
+            if std::env::var("CORKBOARD_DISPLAY").as_deref() == Ok("panel") {
+                let panel_cfg = panel::PanelConfig::from_env().expect(
+                    "CORKBOARD_DISPLAY=panel requires CORKBOARD_PANEL_* env vars \
+                     (see .mex/patterns/deploy-to-orange-pi.md)",
+                );
+                let panel =
+                    panel::Panel::open(&panel_cfg).expect("failed to open the e-paper panel");
+                Arc::new(display::Fanout(vec![preview.clone(), Arc::new(panel)]))
+            } else {
+                preview.clone()
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            preview.clone()
+        }
+    };
+
     let state = Arc::new(AppState {
         storage,
         config: Mutex::new(config),
         document: Mutex::new(document),
-        display: preview.clone(),
+        display,
         web_preview: preview,
         fonts,
         calendar: Mutex::new(CalendarData::empty()),

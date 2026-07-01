@@ -24,4 +24,5 @@ Lookup table for all pattern files in this directory. Check here before starting
 | Pattern | Use when |
 |---------|----------|
 | [add-page-component.md](add-page-component.md) | Adding a new noticeboard page type or editing widget in the Vue web UI |
+| [deploy-to-orange-pi.md](deploy-to-orange-pi.md) | Flashing Armbian and getting the device server running headless on the Orange Pi Zero 2W |
 | [device-api.md](device-api.md) | Loading or publishing page state between the web UI and the device (GET/POST, image upload) |

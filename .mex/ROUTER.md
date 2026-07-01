@@ -18,7 +18,7 @@ edges:
     condition: when setting up the dev environment or running the project for the first time
   - target: patterns/INDEX.md
     condition: when starting a task — check the pattern index for a matching pattern file
-last_updated: 2026-06-28
+last_updated: 2026-07-01
 ---
 
 # Session Bootstrap
@@ -31,7 +31,7 @@ Then read this file fully before doing anything else in this session.
 
 **Calendar variants are now `date | agenda` only** (the single-day `today` variant was removed and folded into `agenda`; both `today` and `week` remain serde/load aliases → `agenda`). `CalendarEl` carries `align: 'left'|'center'` (the text alignment tool now applies to calendars too) and `daysAhead: number` (agenda horizon 1..=7, default 7, set via a number input in `CalendarOptions`). The **Date** variant auto-fits its font to fill the box like a text field (`textFit`/`fit_font_size`), top-aligned with `align` horizontally. The **Agenda** variant draws **bold day headings** (using each font's real 700 face — all four bundled fonts now ship a Bold.ttf), indented events, and a 1px divider (text colour) under each event; it fits a font size then truncates at a line boundary when content overflows. Editor `CalendarWidget` and device `draw_agenda` share the exact layout algorithm (WYSIWYG; parity test green).
 
-**Round two is COMPLETE except hardware deploy.** Both halves are built and working end-to-end: the Vue **editor** (fully round-two: clock/timeline gone; `livePageId` + make-live + `deletePage`; calendar feed-reference; text + bundled fonts; wired to the device for load/publish) AND the Rust **device server** at `device/` (storage + API + `preview.png` + real 6-colour renderer + ICS calendar resolve/poll). Element types: `calendar | image | drawing | text`. The only unbuilt piece is the `Panel` SPI driver (needs hardware). Editor: 216 Vitest + 6 Playwright parity tests. Device: 96 cargo tests. All green; `npm run build` clean.
+**Round two is COMPLETE except hardware deploy.** Both halves are built and working end-to-end: the Vue **editor** (fully round-two: clock/timeline gone; `livePageId` + make-live + `deletePage`; calendar feed-reference; text + bundled fonts; wired to the device for load/publish) AND the Rust **device server** at `device/` (storage + API + `preview.png` + real 6-colour renderer + ICS calendar resolve/poll). Element types: `calendar | image | drawing | text`. The `Panel` SPI driver is written (`device/src/panel.rs`) and reviewed across five codex + Opus passes for hardware-safety and readability. It drives the panel as a **one-shot per render** (`reset → init → refresh → deep_sleep` each `show()`, matching Waveshare's own `init/display/sleep` usage — verified register-identical against the canonical `waveshareteam/e-Paper` repo), so the leading hardware reset recovers any prior state and there's no cross-render machinery. On failure `emergency_power_off` hard-cuts the PWR gate (not just an SPI POWER_OFF), with a stateless per-render `power_up`; a missing PWR var is a hard error unless `CORKBOARD_PANEL_NO_PWR=1` opts out. Unit-tested with fakes behind `GpioLine`/`SpiBus` traits (no real hardware or Linux host needed; only `Panel::open` is `target_os = "linux"`-gated), but still unverified against the real panel, which isn't in hand yet. Editor: 216 Vitest + 6 Playwright parity tests. Device: 126 cargo tests. All green; `npm run build` clean.
 
 **Working — editor:**
 - Web UI editor (Vite + Vue 3 + TS + Pinia + Tailwind v4 + shadcn-vue). App shell in `src/App.vue`: TopBar, then a row of PageSidebar, ToolRail, and a canvas column (ToolOptionsBar above EditorCanvas). (Timeline removed in 1a.) Hydrates its document from the device on startup; Publish does `PUT /api/document`.
@@ -50,9 +50,10 @@ Then read this file fully before doing anything else in this session.
 **BUILT — the device server (Rust + axum) at `device/`.** Single source of truth: stores the
 whole document + images + config as plain files; serves the built editor + the JSON API +
 `preview.png` on one origin (LAN, no auth); renders the live page to an 800×480 six-colour PNG
-behind a `Display` trait (`WebPreview` impl serves `preview.png`; the `Panel` SPI driver is the
-ONLY deferred piece — needs hardware). Resolves calendar events from a Google secret-iCal URL at
-render time, polls the feed, and re-renders only on semantic content change. **63 cargo tests.**
+behind a `Display` trait (`WebPreview` impl serves `preview.png`; `Panel` drives the real
+e-paper panel over SPI/GPIO — written, but unverified against real hardware since the panel
+isn't in hand). Resolves calendar events from a Google secret-iCal URL at
+render time, polls the feed, and re-renders only on semantic content change. **126 cargo tests.**
 - Modules (`device/src/`): `main` (bootstrap + poll task — the poll task resolves once on startup
   then sleeps the interval, so real calendar data shows immediately, not after the first interval;
   also a `log_request` middleware logs every HTTP request as `METHOD path -> status (ms)` at INFO,
@@ -91,7 +92,10 @@ render time, polls the feed, and re-renders only on semantic content change. **6
 The full design is `docs/specs/2026-06-27-device-server-design.md`; durable decisions in
 `context/decisions.md`, the wire contract in `context/protocol.md`, the panel in `context/hardware.md`.
 
-**Only remaining (hardware): the `Panel` SPI driver** behind the `Display` trait, plus a small set
+**The `Panel` SPI driver is now written** (`device/src/panel.rs`, Linux-only, `CORKBOARD_DISPLAY=panel`)
+— ported from Waveshare's own `epd7in3e` demo code, see `context/decisions.md`'s "Panel driver" entry.
+Untested against real hardware: the panel isn't in hand yet, and the Orange Pi's real GPIO chip/line
+numbers are unverified (`gpioinfo` step in `patterns/deploy-to-orange-pi.md`). Plus a small set
 of low-risk review Minors (see the device handoff / `.superpowers/sdd/review-device-final.md`).
 
 **Editor surgery — DONE (plans 1a–1d, all implemented; 137 tests green, build clean):**
@@ -102,7 +106,7 @@ of low-risk review Minors (see the device handoff / `.superpowers/sdd/review-dev
 - Image upload is wired end-to-end: `ImageOptions` uploads to `POST /api/images` and stores the returned id as the element `src` (resolved for display via `/api/images/{id}`).
 
 **Known issues:**
-- The device `Panel` SPI driver is not built (needs hardware). A few low-risk device review Minors remain (see `.superpowers/sdd/review-device-final.md`): `/api/bogus` returns index.html not 404; ICS `signature` delimiter aliasing; 2MB upload limit; image content-type now sniffed.
+- The device `Panel` SPI driver is written but unverified against real hardware (panel not in hand; GPIO chip/line numbers unknown for the Orange Pi). A few low-risk device review Minors remain (see `.superpowers/sdd/review-device-final.md`): `/api/bogus` returns index.html not 404; ICS `signature` delimiter aliasing; 2MB upload limit; image content-type now sniffed.
 
 **Open decisions** (see `context/decisions.md`):
 - Renderer crate choices (raster, text shaping, ICS parse, image decode) — decide at implementation time.

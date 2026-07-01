@@ -22,8 +22,10 @@ which re-resolves feeds and re-renders.
 ## Status
 
 Round two is complete end-to-end **except the hardware deploy**. Both halves work against
-a web preview standing in for the panel. The only unbuilt piece is the `Panel` SPI driver
-(behind the `Display` trait) — it needs the physical board, which isn't in hand yet.
+a web preview standing in for the panel. The `Panel` SPI driver (behind the `Display`
+trait, `device/src/panel.rs`, Linux-only) is now written — ported from Waveshare's own
+`epd7in3e` demo — but untested against real hardware: the panel isn't in hand yet, and the
+GPIO chip/line numbers are unverified (see `.mex/context/decisions.md`).
 
 Tests: 216 Vitest + 6 Playwright parity (editor), 96 cargo tests (device). All green.
 
@@ -54,12 +56,18 @@ rendered panel image.
 
 ### Device env vars
 
-| Var               | Default        | What                         |
-|-------------------|----------------|------------------------------|
-| `CORKBOARD_DATA`  | `device/data`  | Document, images, config     |
-| `CORKBOARD_PORT`  | `8080`         | HTTP port                    |
-| `CORKBOARD_DIST`  | —              | Path to the built editor     |
-| `CORKBOARD_FONTS` | —              | Path to bundled fonts        |
+| Var               | Default          | What                         |
+|-------------------|------------------|------------------------------|
+| `CORKBOARD_DATA`  | `device/data`    | Document, images, config     |
+| `CORKBOARD_PORT`  | `8080`           | HTTP port                    |
+| `CORKBOARD_DIST`  | —                | Path to the built editor     |
+| `CORKBOARD_FONTS` | —                | Path to bundled fonts        |
+| `CORKBOARD_DISPLAY` | (web preview)  | Set to `panel` to drive the real e-paper panel (Linux only) instead of just the web preview |
+| `CORKBOARD_PANEL_SPI` | `/dev/spidev0.0` | SPI device for the panel |
+| `CORKBOARD_PANEL_GPIOCHIP` | —        | gpiochip device for RST/DC/BUSY/PWR (required when `CORKBOARD_DISPLAY=panel`) |
+| `CORKBOARD_PANEL_RST_LINE` / `_DC_LINE` / `_BUSY_LINE` | — | GPIO line offsets (required when `CORKBOARD_DISPLAY=panel`) |
+| `CORKBOARD_PANEL_PWR_LINE` | —        | Power-enable line for the PhotoPainter carrier board. Required unless `CORKBOARD_PANEL_NO_PWR=1` — a missing value is a hard error, never a silent "no gate" |
+| `CORKBOARD_PANEL_NO_PWR` | —          | Set to `1` to explicitly opt out of a power gate (bare HAT with no PWR line to switch) |
 
 ## Commands
 
@@ -71,6 +79,7 @@ rendered panel image.
 | `npm run test:watch`          | Vitest in watch mode                   |
 | `npm run test:parity`         | Playwright editor↔preview parity tests |
 | `cargo test` (in `device/`)   | Device server tests                    |
+| `cargo check --target aarch64-unknown-linux-gnu` (in `device/`) | Type-check the Linux-only panel driver — `src/panel.rs` is `#[cfg(target_os = "linux")]`-gated, so a dev-Mac `cargo check`/`test` never compiles it. Needs the aarch64 cross C toolchain (`aarch64-linux-gnu-gcc`) for the bundled C deps (freetype, ring); runs clean on the target/CI. |
 
 ## Target hardware
 
