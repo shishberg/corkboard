@@ -4,6 +4,7 @@ mod config;
 mod display;
 mod document;
 mod fonts;
+mod logbuf;
 // The real-hardware access (spidev/gpio-cdev) is gated to `target_os = "linux"`
 // inside the module itself — the module is compiled everywhere so its unit
 // tests run on any host, not just Linux.
@@ -11,18 +12,20 @@ mod panel;
 mod render;
 mod sample;
 mod state;
+mod status;
 mod storage;
 mod text;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use axum::{extract::Request, middleware::Next, response::Response};
-use calendar::CalendarData;
 use display::{Display, WebPreview};
 use fonts::Fonts;
+use logbuf::LogBuffer;
 use state::AppState;
 use storage::Storage;
 use tower_http::services::{ServeDir, ServeFile};
+use tracing_subscriber::{filter::LevelFilter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 /// Log one line per HTTP request: method, path, response status, and how long
 /// it took. Applied to the whole app so it covers the API and static files.
@@ -47,7 +50,14 @@ async fn log_request(req: Request, next: Next) -> Response {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    // WARN/ERROR events are additionally copied into an in-memory ring buffer
+    // for the dashboard's error-log panel (see logbuf.rs); stdout logging is
+    // unchanged.
+    let log_buffer = Arc::new(LogBuffer::new(200));
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(logbuf::CaptureLayer::new(log_buffer.clone()).with_filter(LevelFilter::WARN))
+        .init();
 
     let data_path = std::env::var("CORKBOARD_DATA").unwrap_or_else(|_| "./data".to_string());
     let dist_path = std::env::var("CORKBOARD_DIST").unwrap_or_else(|_| "../dist".to_string());
@@ -67,7 +77,7 @@ async fn main() {
     // using the web preview. When the panel is active it's fanned out
     // alongside the preview so `/preview.png` stays useful without walking
     // over to the wall. See .mex/patterns/deploy-to-orange-pi.md.
-    let display: Arc<dyn Display> = {
+    let (display, display_kind): (Arc<dyn Display>, &'static str) = {
         #[cfg(target_os = "linux")]
         {
             if std::env::var("CORKBOARD_DISPLAY").as_deref() == Ok("panel") {
@@ -79,27 +89,30 @@ async fn main() {
                     "CORKBOARD_DISPLAY=panel requires CORKBOARD_PANEL_* env vars \
                      (see .mex/patterns/deploy-to-orange-pi.md)",
                 );
-                Arc::new(display::Fanout(vec![preview.clone(), Arc::new(panel)]))
+                (
+                    Arc::new(display::Fanout(vec![preview.clone(), Arc::new(panel)])),
+                    "panel",
+                )
             } else {
-                preview.clone()
+                (preview.clone(), "web-preview")
             }
         }
         #[cfg(not(target_os = "linux"))]
         {
-            preview.clone()
+            (preview.clone(), "web-preview")
         }
     };
 
-    let state = Arc::new(AppState {
+    let state = Arc::new(AppState::new(
         storage,
-        config: Mutex::new(config),
-        document: Mutex::new(document),
+        config,
+        document,
         display,
-        web_preview: preview,
+        preview,
         fonts,
-        calendar: Mutex::new(CalendarData::empty()),
-        displayed_signature: Mutex::new(None),
-    });
+        display_kind,
+        log_buffer,
+    ));
 
     // Initial render using sample fallback (no feeds resolved yet).
     if let Err(e) = state.render_and_show() {

@@ -36,6 +36,18 @@ impl Fonts {
         self.bold.iter()
     }
 
+    /// Sorted list of available font ids, for the dashboard.
+    pub fn ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self.fonts.keys().cloned().collect();
+        ids.sort();
+        ids
+    }
+
+    /// Whether the given font id also ships a bold face.
+    pub fn has_bold(&self, id: &str) -> bool {
+        self.bold.contains_key(id)
+    }
+
     // ------------------------------------------------------------------ //
 
     fn embedded_only() -> Self {
@@ -129,6 +141,16 @@ mod tests {
         let fonts = Fonts::load();
         assert!(fonts.entries().count() >= 1);
         assert!(!fonts.default_id().is_empty());
+    }
+
+    #[test]
+    fn ids_are_sorted_and_include_the_default() {
+        let fonts = Fonts::embedded_only();
+        let ids = fonts.ids();
+        assert!(ids.contains(&"atkinson-hyperlegible".to_string()));
+        let mut sorted = ids.clone();
+        sorted.sort();
+        assert_eq!(ids, sorted);
     }
 
     #[test]

@@ -38,6 +38,17 @@ impl Storage {
         Ok(doc)
     }
 
+    /// When `document.json` was last written (millis since epoch), for the
+    /// dashboard. `None` if it doesn't exist yet or its mtime can't be read.
+    pub fn document_saved_at_ms(&self) -> Option<i64> {
+        let modified = std::fs::metadata(self.doc_path()).ok()?.modified().ok()?;
+        let millis = modified
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_millis();
+        i64::try_from(millis).ok()
+    }
+
     pub fn save_document(&self, doc: &Document) -> anyhow::Result<()> {
         std::fs::create_dir_all(&self.root)?;
         let data = serde_json::to_string_pretty(doc)?;

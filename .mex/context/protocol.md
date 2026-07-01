@@ -17,7 +17,7 @@ edges:
     condition: for the panel the renderer targets
   - target: patterns/device-api.md
     condition: for the how-to runbook of the load/publish flow
-last_updated: 2026-06-28
+last_updated: 2026-07-01
 ---
 
 # Editor ⇄ Device protocol
@@ -37,6 +37,8 @@ document and serves the editor, the API, and the preview on one origin (LAN, no 
 | `PUT /api/feeds` | Add/update/remove feeds; secret URLs are write-only. |
 | `POST /api/refresh` | Force an immediate feed fetch + re-render now (the "Refresh now" button). |
 | `GET /preview.png` | The current rendered 800×480 image — authoritative "what it looks like", and the stand-in until hardware exists. |
+| `GET /api/status` | Device health snapshot for `/dashboard` — uptime, display backend, per-feed fetch status, document/preview timestamps, connected preview listeners, fonts, recent WARN/ERROR logs. camelCase JSON, same as every other endpoint. Secret feed URLs are never included. |
+| `GET /dashboard` | A self-contained status page (inline CSS/JS, no build step) that polls `/api/status` every 5s and shows the live preview, document/feed/panel status, and recent error logs. |
 
 ## Document shape (lives in `src/stores/types.ts`)
 The editor's `DocState` IS the wire format. Round-two changes from the round-one shape:

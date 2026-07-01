@@ -9,9 +9,22 @@ use crate::{
     display::{Display, WebPreview},
     document::{Document, Element},
     fonts::Fonts,
+    logbuf::LogBuffer,
     render,
     storage::Storage,
 };
+
+/// Result of the most recent fetch attempt for one calendar feed — surfaced
+/// on the dashboard. Kept per feed id, overwritten on every attempt.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FeedStatus {
+    pub last_attempt_ms: i64,
+    pub ok: bool,
+    /// Number of events resolved for today, when the fetch succeeded.
+    pub today_event_count: Option<usize>,
+    /// Human-readable failure reason. Never contains the secret feed URL.
+    pub error: Option<String>,
+}
 
 pub struct AppState {
     pub storage: Storage,
@@ -24,9 +37,49 @@ pub struct AppState {
     pub calendar: Mutex<CalendarData>,
     /// Semantic fingerprint of the last rendered calendar content, for change-detection.
     pub displayed_signature: Mutex<Option<String>>,
+    /// Millis since epoch when the process started — dashboard uptime.
+    pub started_at_ms: i64,
+    /// Which `Display` backend is active: "panel" or "web-preview".
+    pub display_kind: String,
+    /// Recent WARN/ERROR log lines, for the dashboard.
+    pub logs: Arc<LogBuffer>,
+    /// Most recent fetch result per feed id referenced by the live page.
+    pub feed_status: Mutex<BTreeMap<String, FeedStatus>>,
+    /// When the calendar was last polled/resolved at all (millis since epoch).
+    pub last_poll_at_ms: Mutex<Option<i64>>,
 }
 
 impl AppState {
+    /// Construct with fresh monitoring state (uptime clock starts now, no
+    /// feed history, empty log buffer unless one is supplied).
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        storage: Storage,
+        config: Config,
+        document: Document,
+        display: Arc<dyn Display>,
+        web_preview: Arc<WebPreview>,
+        fonts: Arc<Fonts>,
+        display_kind: impl Into<String>,
+        logs: Arc<LogBuffer>,
+    ) -> Self {
+        AppState {
+            storage,
+            config: Mutex::new(config),
+            document: Mutex::new(document),
+            display,
+            web_preview,
+            fonts,
+            calendar: Mutex::new(CalendarData::empty()),
+            displayed_signature: Mutex::new(None),
+            started_at_ms: chrono::Utc::now().timestamp_millis(),
+            display_kind: display_kind.into(),
+            logs,
+            feed_status: Mutex::new(BTreeMap::new()),
+            last_poll_at_ms: Mutex::new(None),
+        }
+    }
+
     /// Re-render the live page with the currently stored calendar data and push to the display.
     pub fn render_and_show(&self) -> anyhow::Result<()> {
         let doc = self.document.lock().unwrap().clone();
@@ -93,10 +146,13 @@ impl AppState {
                 .collect()
         };
 
+        *self.last_poll_at_ms.lock().unwrap() = Some(chrono::Utc::now().timestamp_millis());
+
         // Fetch and resolve each feed.  Failures are swallowed — the calendar
         // element will fall back to sample data.
         let mut feeds = BTreeMap::new();
         for feed_id in &feed_ids {
+            let attempt_ms = chrono::Utc::now().timestamp_millis();
             if let Some(secret_url) = feed_secrets.get(feed_id) {
                 // Never log the secret URL — only the feed id.
                 tracing::info!("fetching calendar feed '{}'", feed_id);
@@ -109,19 +165,49 @@ impl AppState {
                             resolved.today.len(),
                             week_count
                         );
+                        self.feed_status.lock().unwrap().insert(
+                            feed_id.clone(),
+                            FeedStatus {
+                                last_attempt_ms: attempt_ms,
+                                ok: true,
+                                today_event_count: Some(resolved.today.len()),
+                                error: None,
+                            },
+                        );
                         feeds.insert(feed_id.clone(), resolved);
                     }
-                    Err(_) => {
+                    Err(e) => {
                         // Never log the secret URL.  Log only the feed id so
-                        // operators can identify which feed failed.
+                        // operators can identify which feed failed. `e`'s
+                        // Display is already URL-safe (see fetch_ics).
                         tracing::warn!(
                             "calendar feed '{}' could not be fetched; falling back to sample",
                             feed_id
                         );
+                        self.feed_status.lock().unwrap().insert(
+                            feed_id.clone(),
+                            FeedStatus {
+                                last_attempt_ms: attempt_ms,
+                                ok: false,
+                                today_event_count: None,
+                                error: Some(e.to_string()),
+                            },
+                        );
                     }
                 }
+            } else {
+                // Referenced by the live page but not configured — never
+                // fetched. Surface that distinction on the dashboard.
+                self.feed_status.lock().unwrap().insert(
+                    feed_id.clone(),
+                    FeedStatus {
+                        last_attempt_ms: attempt_ms,
+                        ok: false,
+                        today_event_count: None,
+                        error: Some("not configured in config.json".to_string()),
+                    },
+                );
             }
-            // Feed not configured → leave it out → renderer uses sample fallback.
         }
 
         CalendarData { today, feeds }
@@ -202,9 +288,10 @@ mod tests {
         display::WebPreview,
         document::{CalendarEl, CalendarVariant, Colour, Document, Element, TextAlign},
         fonts::Fonts,
+        logbuf::LogBuffer,
         storage::Storage,
     };
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use tokio::io::AsyncReadExt;
 
     fn make_state() -> Arc<AppState> {
@@ -215,16 +302,16 @@ mod tests {
         let document = Document::default();
         let preview = Arc::new(WebPreview::new());
 
-        Arc::new(AppState {
+        Arc::new(AppState::new(
             storage,
-            config: Mutex::new(config),
-            document: Mutex::new(document),
-            display: preview.clone(),
-            web_preview: preview,
-            fonts: Arc::new(Fonts::load()),
-            calendar: Mutex::new(CalendarData::empty()),
-            displayed_signature: Mutex::new(None),
-        })
+            config,
+            document,
+            preview.clone(),
+            preview,
+            Arc::new(Fonts::load()),
+            "web-preview",
+            Arc::new(LogBuffer::new(200)),
+        ))
     }
 
     // `refresh_and_render` is called on every PUT and on /api/refresh. The user

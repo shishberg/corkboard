@@ -90,6 +90,13 @@ impl WebPreview {
     pub fn subscribe(&self) -> watch::Receiver<i64> {
         self.tx.subscribe()
     }
+
+    /// How many long-poll clients (`GET /preview/updates`) are currently
+    /// holding a receiver open — a proxy for "how many browsers are watching
+    /// the live preview right now", for the dashboard.
+    pub fn subscriber_count(&self) -> usize {
+        self.tx.receiver_count()
+    }
 }
 
 impl Display for WebPreview {

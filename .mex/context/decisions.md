@@ -22,6 +22,39 @@ last_updated: 2026-07-01
 
 ## Decision Log
 
+### Device status dashboard: server-rendered snapshot endpoint, in-memory log ring buffer
+**Date:** 2026-07-01
+**Status:** Active
+**Decision:** Add `GET /dashboard` (a self-contained HTML page, inline CSS/JS, no build step,
+`device/src/dashboard.html`) and `GET /api/status` (JSON, `device/src/status.rs`) to the device
+server, on the `device-dashboard` branch off `panel-driver`. The page polls the status endpoint
+every 5s: live preview, render/publish/poll timestamps, connected preview long-poll listener
+count, per-feed calendar fetch status, document/live-page info, device platform + active
+`Display` backend, available fonts, the env vars this run started with, and recent WARN/ERROR
+logs. Recent logs come from a second `tracing_subscriber` `Layer` (`device/src/logbuf.rs`) run
+alongside the existing stdout `fmt` layer, filtered to `LevelFilter::WARN`, copying into a capped
+in-memory `VecDeque` — no change to existing logging behaviour. Per-feed fetch status is tracked
+in `AppState::feed_status`, set inside `resolve_calendar` (the one fetch entry point shared by
+polling/refresh/publish). `/api/status` JSON is camelCase, matching every other endpoint.
+**Reasoning:** A single physical device with no auth and no accompanying admin UI needed some way
+to see "is this thing working" (last render, feed fetch failures, panel vs web-preview, etc.)
+without SSH-ing in to read logs. A plain polled endpoint + inline-JS page needed no new
+dependencies and no build step, consistent with `preview.html`'s existing pattern.
+**Alternatives considered:** WebSocket/SSE push instead of polling (rejected — 5s polling is
+plenty for a status page nobody stares at continuously, and reuses the existing long-poll
+pattern conceptually without adding another transport); logging to a file and tailing it
+(rejected — an in-memory ring buffer needs no rotation/retention policy and resets cleanly on
+restart, appropriate for a low-traffic household device); snake_case JSON for this one endpoint
+to dodge repeating `#[serde(rename_all = "camelCase")]` on every new struct (considered, reverted
+— staying camelCase keeps every device JSON endpoint uniform, worth the repetition).
+**Consequences:** New `AppState::new(...)` constructor centralizes the monitoring-field defaults
+(`started_at_ms`, `display_kind`, `logs`, `feed_status`, `last_poll_at_ms`) — the struct literal
+was getting unwieldy across `main.rs` and three test helpers. `WebPreview::subscriber_count()`
+exposes the watch-channel's `receiver_count()` as "how many browsers are watching the live
+preview right now". Deferred, not part of this change: caching the rendered `preview.png` to disk
+(currently in-memory only in `WebPreview`, lost on process restart) — raised mid-review, tracked
+as a separate follow-up.
+
 ### Panel driver: `spidev` + `gpio-cdev`, one-shot port of Waveshare's `epd7in3e` demo
 **Date:** 2026-07-01
 **Status:** Active — written + heavily reviewed; untested against real hardware (panel not in hand)

@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::{
     config::Feed,
     state::AppState,
+    status,
 };
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -25,9 +26,11 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/feeds", get(get_feeds))
         .route("/api/feeds", put(put_feeds))
         .route("/api/refresh", post(refresh))
+        .route("/api/status", get(get_status))
         .route("/preview", get(preview_page))
         .route("/preview.png", get(preview_png))
         .route("/preview/updates", get(preview_updates))
+        .route("/dashboard", get(dashboard_page))
 }
 
 async fn get_document(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -124,6 +127,18 @@ async fn refresh(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse
     Ok(Json(json!({"ok": true})))
 }
 
+/// Snapshot of device health for the `/dashboard` page — never includes
+/// secret feed URLs.
+async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    Json(status::build(&state))
+}
+
+/// Serve the status dashboard: a static shell that fetches `/api/status` on
+/// an interval and renders it, plus the live preview image.
+async fn dashboard_page() -> impl IntoResponse {
+    Html(include_str!("dashboard.html"))
+}
+
 /// Serve the live preview page: the current render, plus a script that
 /// long-polls `/preview/updates` and reloads the image when it changes.
 async fn preview_page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -193,16 +208,16 @@ impl<E: Into<anyhow::Error>> From<E> for AppError {
 mod tests {
     use super::*;
     use crate::{
-        calendar::CalendarData,
         display::WebPreview,
         document::Document,
         fonts::Fonts,
+        logbuf::LogBuffer,
         state::AppState,
         storage::Storage,
     };
     use axum::http::{Request, StatusCode};
     use http_body_util::BodyExt;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use tower::ServiceExt;
 
     fn make_state() -> Arc<AppState> {
@@ -213,16 +228,16 @@ mod tests {
         let document = Document::default();
         let preview = Arc::new(WebPreview::new());
 
-        Arc::new(AppState {
+        Arc::new(AppState::new(
             storage,
-            config: Mutex::new(config),
-            document: Mutex::new(document),
-            display: preview.clone(),
-            web_preview: preview,
-            fonts: Arc::new(Fonts::load()),
-            calendar: Mutex::new(CalendarData::empty()),
-            displayed_signature: Mutex::new(None),
-        })
+            config,
+            document,
+            preview.clone(),
+            preview,
+            Arc::new(Fonts::load()),
+            "web-preview",
+            Arc::new(LogBuffer::new(200)),
+        ))
     }
 
     fn make_router(state: Arc<AppState>) -> Router {

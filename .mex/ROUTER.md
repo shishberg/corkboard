@@ -89,6 +89,26 @@ render time, polls the feed, and re-renders only on semantic content change. **1
 - Parity guardrail (S4): `npm run test:parity` (Playwright) compares the editor surface screenshot
   vs `preview.png` on a coarse content-mask IoU (≥0.35; feedless doc → both use sample data).
 
+**Status dashboard (`GET /dashboard` + `GET /api/status`), built on the `device-dashboard` branch
+off `panel-driver`.** A self-contained HTML page (`device/src/dashboard.html`, inline CSS/JS, no
+build step) polling `/api/status` every 5s: live preview image (reusing the same long-poll
+pattern as `/preview`), last-rendered/last-published/last-poll timestamps, render count, connected
+preview long-poll listeners (`WebPreview::subscriber_count`, a proxy for "browsers watching now"),
+per-feed calendar fetch status (ok/error, today's event count, human error text — never the
+secret URL), document page count + live page name, device platform (`std::env::consts::OS`/`ARCH`
+— distinguishes an Orange Pi from a Mac dev box) + which `Display` backend is active
+(`AppState::display_kind`, "panel" or "web-preview"), available fonts (+ which ship a bold face),
+the env vars/flags this run started with, and recent WARN/ERROR log lines. Log capture is a second
+`tracing_subscriber` `Layer` (`device/src/logbuf.rs`'s `CaptureLayer`, filtered to `LevelFilter::WARN`)
+alongside the normal stdout `fmt` layer — copies into a capped in-memory ring buffer, no behaviour
+change to existing logging. Per-feed fetch results are tracked in `AppState::feed_status` (set
+inside `resolve_calendar`, the single fetch entry point shared by polling/refresh/publish). New
+`AppState::new(...)` constructor centralizes the monitoring-field defaults (call sites: `main.rs`
+and both `state.rs`/`api.rs`/`status.rs` test helpers) since the struct literal got unwieldy once
+these fields were added. `GET /api/status` JSON is camelCase, matching every other endpoint.
+Disk-caching `preview.png` (currently in-memory only, lost on restart) was raised but deferred as
+a separate follow-up, not part of this change.
+
 The full design is `docs/specs/2026-06-27-device-server-design.md`; durable decisions in
 `context/decisions.md`, the wire contract in `context/protocol.md`, the panel in `context/hardware.md`.
 
