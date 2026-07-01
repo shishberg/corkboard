@@ -1,5 +1,6 @@
 import type { Feed } from '@/stores/feeds'
 import type { DocState } from '@/stores/types'
+import type { DashboardStatus } from '@/lib/dashboardTypes'
 
 /** GET /api/feeds — returns parsed Feed array, or null on any network/parse failure. */
 export async function fetchFeeds(): Promise<Feed[] | null> {
@@ -64,6 +65,17 @@ export async function uploadImage(file: Blob): Promise<string | null> {
     if (!res.ok) return null
     const data = (await res.json()) as { id?: string }
     return typeof data.id === 'string' ? data.id : null
+  } catch {
+    return null
+  }
+}
+
+/** GET /api/status — device health snapshot for the dashboard, or null on any failure. */
+export async function fetchStatus(): Promise<DashboardStatus | null> {
+  try {
+    const res = await fetch('/api/status')
+    if (!res.ok) return null
+    return (await res.json()) as DashboardStatus
   } catch {
     return null
   }

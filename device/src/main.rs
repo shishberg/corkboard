@@ -145,9 +145,14 @@ async fn main() {
 
     let serve_dir = ServeDir::new(&dist_path)
         .not_found_service(ServeFile::new(format!("{}/index.html", dist_path)));
+    // The dashboard is a second Vite entry point (dashboard.html), built to
+    // dist/dashboard.html alongside the editor; served at the extension-less
+    // path the /api/status polling script and users both expect.
+    let dashboard_file = ServeFile::new(format!("{}/dashboard.html", dist_path));
 
     let app = api_router
         .with_state(state)
+        .route_service("/dashboard", dashboard_file)
         .fallback_service(serve_dir)
         .layer(axum::middleware::from_fn(log_request));
 

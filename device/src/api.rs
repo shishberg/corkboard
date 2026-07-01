@@ -30,7 +30,6 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/preview", get(preview_page))
         .route("/preview.png", get(preview_png))
         .route("/preview/updates", get(preview_updates))
-        .route("/dashboard", get(dashboard_page))
 }
 
 async fn get_document(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -131,12 +130,6 @@ async fn refresh(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse
 /// secret feed URLs.
 async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     Json(status::build(&state))
-}
-
-/// Serve the status dashboard: a static shell that fetches `/api/status` on
-/// an interval and renders it, plus the live preview image.
-async fn dashboard_page() -> impl IntoResponse {
-    Html(include_str!("dashboard.html"))
 }
 
 /// Serve the live preview page: the current render, plus a script that
