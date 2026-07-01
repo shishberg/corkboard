@@ -2,6 +2,7 @@
 import { useDeviceStatus } from '@/composables/useDeviceStatus'
 import { Button } from '@/components/ui/button'
 import PreviewPanel from '@/components/dashboard/PreviewPanel.vue'
+import PreviewStatsPanel from '@/components/dashboard/PreviewStatsPanel.vue'
 import DocumentPanel from '@/components/dashboard/DocumentPanel.vue'
 import DevicePanel from '@/components/dashboard/DevicePanel.vue'
 import FontsPanel from '@/components/dashboard/FontsPanel.vue'
@@ -25,19 +26,14 @@ const { status, unreachable } = useDeviceStatus()
       <Button data-role="editor" as="a" href="/" variant="outline" size="sm">Editor</Button>
     </header>
 
-    <template v-if="status">
-      <PreviewPanel :preview="status.preview" />
-
-      <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <DocumentPanel :document="status.document" />
-        <DevicePanel :status="status" />
-        <FontsPanel :fonts="status.fonts" />
-      </div>
-
-      <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <FeedsPanel :feeds="status.feeds" />
-        <LogsPanel :logs="status.logs" />
-      </div>
-    </template>
+    <div v-if="status" class="columns-1 gap-4 sm:columns-2 xl:columns-3">
+      <div class="mb-4 break-inside-avoid"><PreviewPanel :preview="status.preview" /></div>
+      <div class="mb-4 break-inside-avoid"><PreviewStatsPanel :preview="status.preview" /></div>
+      <div class="mb-4 break-inside-avoid"><DocumentPanel :document="status.document" /></div>
+      <div class="mb-4 break-inside-avoid"><DevicePanel :status="status" /></div>
+      <div class="mb-4 break-inside-avoid"><FontsPanel :fonts="status.fonts" /></div>
+      <div class="mb-4 break-inside-avoid"><FeedsPanel :feeds="status.feeds" /></div>
+      <div class="mb-4 break-inside-avoid"><LogsPanel :logs="status.logs" /></div>
+    </div>
   </div>
 </template>
