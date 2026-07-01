@@ -27,7 +27,7 @@ trait, `device/src/panel.rs`, Linux-only) is now written — ported from Wavesha
 `epd7in3e` demo — but untested against real hardware: the panel isn't in hand yet, and the
 GPIO chip/line numbers are unverified (see `.mex/context/decisions.md`).
 
-Tests: 216 Vitest + 6 Playwright parity (editor), 96 cargo tests (device). All green.
+Tests: 216 Vitest + 6 Playwright parity (editor), 119 cargo tests (device). All green.
 
 ## Requirements
 

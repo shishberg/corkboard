@@ -132,7 +132,7 @@ To actually drive the panel once it's wired to the board:
    gate"; only set `CORKBOARD_PANEL_NO_PWR=1` instead if driving a bare HAT with no power
    gate.)
 3. Watch `journalctl -u corkboard-device -f` on the first render — a wrong BUSY line
-   number will surface as `panel BUSY line never went idle (timed out after 120s)`.
+   number will surface as `panel BUSY line never went idle within 120s`.
 
 What's still unverified against real hardware (can't be resolved without the physical
 panel): whether the chunked SPI transfer of the 192,000-byte framebuffer refreshes

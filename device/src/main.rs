@@ -4,9 +4,9 @@ mod config;
 mod display;
 mod document;
 mod fonts;
-// `Panel::open` (the only part that touches real hardware) is gated to
-// `target_os = "linux"` inside the module itself — the module is compiled
-// everywhere so its unit tests run on any host, not just Linux.
+// The real-hardware access (spidev/gpio-cdev) is gated to `target_os = "linux"`
+// inside the module itself — the module is compiled everywhere so its unit
+// tests run on any host, not just Linux.
 mod panel;
 mod render;
 mod sample;
@@ -71,12 +71,14 @@ async fn main() {
         #[cfg(target_os = "linux")]
         {
             if std::env::var("CORKBOARD_DISPLAY").as_deref() == Ok("panel") {
-                let panel_cfg = panel::PanelConfig::from_env().expect(
+                // Reads CORKBOARD_PANEL_* env vars now; the SPI/GPIO hardware is
+                // opened and released per render (not held), so a wiring error
+                // surfaces on the first render — logged by the startup render
+                // path — rather than at construction.
+                let panel = panel::Panel::from_env().expect(
                     "CORKBOARD_DISPLAY=panel requires CORKBOARD_PANEL_* env vars \
                      (see .mex/patterns/deploy-to-orange-pi.md)",
                 );
-                let panel =
-                    panel::Panel::open(&panel_cfg).expect("failed to open the e-paper panel");
                 Arc::new(display::Fanout(vec![preview.clone(), Arc::new(panel)]))
             } else {
                 preview.clone()

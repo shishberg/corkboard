@@ -1,47 +1,42 @@
-//! SPI/GPIO driver for the Waveshare 7.3" E6 (Spectra 6) panel, 800x480,
-//! 6-colour. The real hardware access (`spidev`/`gpio-cdev`, which need
-//! Linux ioctls) is gated to `target_os = "linux"` — `Panel::open` doesn't
-//! exist on other platforms, so `main.rs` can only ever construct a `Panel`
-//! there, and macOS dev machines fall back to `WebPreview`. Everything else
-//! in this module (the register sequence + BUSY-timeout logic, behind the
-//! `GpioLine`/`SpiBus` seams) compiles and is unit-tested on every platform,
-//! so the hardware-safety logic doesn't need real hardware or a Linux host
-//! to verify.
-//!
-//! The register sequence, reset/busy timing, and colour codes below are a
-//! byte-for-byte port of Waveshare's own Python `epd7in3e` driver (verified
-//! identical between the PhotoPainter kit's copy and the canonical
-//! `waveshareteam/e-Paper` repo). The C demo agrees on everything except one
-//! register write in `turn_on_display` — see the note there. See
-//! `.mex/patterns/deploy-to-orange-pi.md` for the source and for what's
-//! still unverified: the GPIO chip/line numbers are Raspberry Pi BCM numbers
-//! in Waveshare's demo and do NOT carry over to the Orange Pi's Allwinner
-//! H618 numbering, even though the 40-pin header is physically pin-compatible.
-//! Determine the real numbers with `gpioinfo` once the panel is wired to the
-//! board — there are no hardcoded pin defaults here on purpose, so a wrong
-//! guess can't silently drive the wrong line.
-//!
-//! Usage model: each `show()` drives the panel as a self-contained one-shot
-//! — hardware reset, full init (register config + POWER_ON), image + refresh
-//! + POWER_OFF, then DEEP_SLEEP — exactly how Waveshare's own demo and other
-//! persistent apps (e.g. PaperPiAI) drive this hardware: `init(); display();
-//! sleep()` per image. Two consequences worth stating:
-//!  * The leading hardware reset re-establishes the controller's state from
-//!    scratch every render, so a previous render that timed out or failed
-//!    partway leaves nothing to clean up across calls — hence no fault latch
-//!    and no cross-render state. Each render also re-asserts the PWR gate at
-//!    the top (`power_up`), so it's fine for a failure to have left it low.
-//!    If a render fails *after* POWER_ON, `show()` runs `emergency_power_off`:
-//!    a best-effort SPI POWER_OFF *and* — the part that still works when SPI
-//!    itself is what failed — dropping the PWR gate to hard-cut the
-//!    high-voltage rail (the acute damage hazard). The next render's
-//!    `power_up` + reset recovers from there.
-//!  * On the success path the panel sits in DEEP_SLEEP between renders, its
-//!    intended idle state, with PWR still asserted. We don't de-assert PWR on
-//!    process shutdown (that would need graceful-shutdown wiring `main.rs`
-//!    doesn't have, and deep sleep already draws almost nothing).
+#![allow(dead_code)]
 
-use std::sync::Mutex;
+//! SPI/GPIO driver for the Waveshare 7.3" E6 (Spectra 6) panel, 800x480,
+//! 6-colour. A byte-for-byte port of Waveshare's own Python `epd7in3e` driver
+//! (verified register-identical between the PhotoPainter kit's copy and the
+//! canonical `waveshareteam/e-Paper` repo). The C demo agrees on everything
+//! except one register write in `turn_on_display` — see the note there.
+//!
+//! **One-shot per refresh, mirroring the reference's whole host lifecycle.**
+//! `Panel` stores only config. Every `show()` opens a fresh host session
+//! (assert PWR, open SPI, claim RST/DC/BUSY), runs one refresh (reset, init,
+//! frame, refresh, deep sleep), then releases *everything* — matching the
+//! reference's `module_init()` / `module_exit()` bracketing of each image.
+//! Nothing is carried between refreshes: no held handles, no cross-render
+//! state. Between refreshes the panel is unpowered.
+//!
+//! **Teardown is guaranteed on every exit path.** The opened resources live in
+//! a `Session` (and, mid-open, an `OpeningGuard`) whose `Drop` runs teardown,
+//! so any early return — a `?` on an SPI/GPIO error, a BUSY timeout — still
+//! releases the hardware. Teardown drives RST/DC low, closes SPI, then drops
+//! the PWR gate (the reference's module_exit order: bus released *before* power
+//! is cut, so no line is left driving an unpowered panel). On a failed refresh
+//! it also best-effort sends POWER_OFF as an emergency high-voltage-rail kill;
+//! on a clean refresh the refresh already powered off, so that's skipped.
+//!
+//! Real hardware access (`spidev`/`gpio-cdev`, which need Linux ioctls) is
+//! gated to `target_os = "linux"`; everything else — the register sequence and
+//! timing behind the `HostOpener`/`SpiBus`/`GpioLine` seams — compiles and is
+//! unit-tested with fakes on any host, so the hardware-safety logic needs no
+//! real hardware or Linux box to verify.
+//!
+//! See `.mex/patterns/deploy-to-orange-pi.md` for what's still unverified: the
+//! GPIO chip/line numbers are Raspberry Pi BCM numbers in Waveshare's demo and
+//! do NOT carry over to the Orange Pi's Allwinner H618 numbering, even though
+//! the 40-pin header is physically pin-compatible. Determine the real numbers
+//! with `gpioinfo` once the panel is wired — there are no hardcoded pin
+//! defaults here on purpose, so a wrong guess can't silently drive the wrong
+//! line.
+
 use std::time::{Duration, Instant};
 
 #[cfg(target_os = "linux")]
@@ -54,27 +49,15 @@ use crate::document::Colour;
 
 const WIDTH: usize = 800;
 const HEIGHT: usize = 480;
-
-/// Max bytes per write to the SPI device, matching the stock Linux `spidev`
-/// kernel module's default `bufsiz` (4096). See `send_data_bulk` for why
-/// this is a plain chunk size, not a chip-select-preserving trick.
 const SPI_CHUNK: usize = 4096;
-
-/// How long to wait for BUSY to go idle before giving up on a render. The
-/// panel's full refresh takes tens of seconds (`context/hardware.md`), so
-/// this is deliberately generous — it can only fire on a genuinely stuck
-/// panel, and a render that hits it just errors (the next render resets and
-/// retries from scratch).
 const BUSY_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// How long to let the panel's power rail stabilise after asserting the PWR
-/// gate, before driving the reset pulse. Paid once per render (negligible next
-/// to a render's tens of seconds) so PWR handling can stay stateless: every
-/// render re-asserts PWR unconditionally rather than tracking rail state.
+/// Time to let the panel's power rail stabilise after asserting the PWR gate,
+/// before anything drives the panel. The reference doesn't wait here; this is
+/// a small safety margin so the reset pulse never lands on a still-settling
+/// rail. Skipped entirely on a bare HAT with no gate.
 const PWR_SETTLE: Duration = Duration::from_millis(10);
 
-/// Seam over `gpio_cdev::LineHandle` so the reset/BUSY/command logic can be
-/// unit-tested with a fake line instead of a real GPIO character device.
 trait GpioLine: Send {
     fn set_value(&self, value: u8) -> anyhow::Result<()>;
     fn get_value(&self) -> anyhow::Result<u8>;
@@ -92,9 +75,11 @@ impl GpioLine for LineHandle {
     }
 }
 
-/// Seam over `spidev::Spidev`, for the same reason as `GpioLine`.
 trait SpiBus: Send {
     fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()>;
+    fn close(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -104,30 +89,106 @@ impl SpiBus for Spidev {
     }
 }
 
+trait HostBackend {
+    fn request_output(
+        &mut self,
+        line: u32,
+        initial: u8,
+        consumer: &'static str,
+    ) -> anyhow::Result<Box<dyn GpioLine>>;
+    fn request_input(
+        &mut self,
+        line: u32,
+        consumer: &'static str,
+    ) -> anyhow::Result<Box<dyn GpioLine>>;
+    fn open_spi(&mut self, path: &str) -> anyhow::Result<Box<dyn SpiBus>>;
+}
+
+trait HostOpener: Send + Sync {
+    fn open(&self, cfg: &PanelConfig) -> anyhow::Result<HostResources>;
+}
+
+struct RealOpener;
+
+impl HostOpener for RealOpener {
+    fn open(&self, cfg: &PanelConfig) -> anyhow::Result<HostResources> {
+        open_real_host(cfg)
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct LinuxBackend {
+    chip: Chip,
+}
+
+#[cfg(target_os = "linux")]
+impl HostBackend for LinuxBackend {
+    fn request_output(
+        &mut self,
+        line: u32,
+        initial: u8,
+        consumer: &'static str,
+    ) -> anyhow::Result<Box<dyn GpioLine>> {
+        Ok(Box::new(self.chip.get_line(line)?.request(
+            LineRequestFlags::OUTPUT,
+            initial,
+            consumer,
+        )?))
+    }
+
+    fn request_input(
+        &mut self,
+        line: u32,
+        consumer: &'static str,
+    ) -> anyhow::Result<Box<dyn GpioLine>> {
+        Ok(Box::new(self.chip.get_line(line)?.request(
+            LineRequestFlags::INPUT,
+            0,
+            consumer,
+        )?))
+    }
+
+    fn open_spi(&mut self, path: &str) -> anyhow::Result<Box<dyn SpiBus>> {
+        let mut spi = Spidev::open(path)?;
+        spi.configure(
+            &SpidevOptions::new()
+                .bits_per_word(8)
+                .max_speed_hz(4_000_000)
+                .mode(SpiModeFlags::SPI_MODE_0)
+                .build(),
+        )?;
+        Ok(Box::new(spi))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn open_real_host(cfg: &PanelConfig) -> anyhow::Result<HostResources> {
+    let mut backend = LinuxBackend {
+        chip: Chip::new(&cfg.gpiochip_path)?,
+    };
+    open_resources(cfg, &mut backend)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_real_host(_cfg: &PanelConfig) -> anyhow::Result<HostResources> {
+    anyhow::bail!("real e-paper panel access is only available on Linux")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PanelConfig {
     pub spi_path: String,
     pub gpiochip_path: String,
     pub rst_line: u32,
     pub dc_line: u32,
     pub busy_line: u32,
-    /// PhotoPainter carrier board's panel power-enable line. `None` only when
-    /// explicitly opted out (a bare HAT with no gate); a missing PWR var is an
-    /// error, not a silent `None` — see `from_getter`.
     pub pwr_line: Option<u32>,
 }
 
 impl PanelConfig {
-    /// Reads `CORKBOARD_PANEL_*` env vars. No pin-number defaults — see the
-    /// module doc comment for why guessing here would be worse than failing
-    /// loudly.
     pub fn from_env() -> anyhow::Result<Self> {
-        Self::from_getter(&|name: &str| std::env::var(name))
+        Self::from_getter(&|name| std::env::var(name))
     }
 
-    /// Does the actual parsing, taking the var-lookup as a parameter instead
-    /// of calling `std::env::var` directly, so tests can supply a fake lookup
-    /// instead of mutating real process env vars — mutating shared process
-    /// state from tests running in parallel threads is a flakiness trap.
     fn from_getter(
         get: &dyn Fn(&str) -> Result<String, std::env::VarError>,
     ) -> anyhow::Result<Self> {
@@ -135,48 +196,62 @@ impl PanelConfig {
             get: &dyn Fn(&str) -> Result<String, std::env::VarError>,
             name: &str,
         ) -> anyhow::Result<String> {
-            get(name).map_err(|_| anyhow::anyhow!("{name} is not set"))
+            match get(name) {
+                Ok(value) => Ok(value),
+                Err(std::env::VarError::NotPresent) => Err(anyhow::anyhow!("{name} is not set")),
+                Err(e @ std::env::VarError::NotUnicode(_)) => Err(anyhow::anyhow!("{name}: {e}")),
+            }
         }
+
+        fn optional_with_default(
+            get: &dyn Fn(&str) -> Result<String, std::env::VarError>,
+            name: &str,
+            default: &str,
+        ) -> anyhow::Result<String> {
+            match get(name) {
+                Ok(value) => Ok(value),
+                Err(std::env::VarError::NotPresent) => Ok(default.to_string()),
+                Err(e @ std::env::VarError::NotUnicode(_)) => Err(anyhow::anyhow!("{name}: {e}")),
+            }
+        }
+
         fn parse_line(name: &str, value: String) -> anyhow::Result<u32> {
             value.parse().map_err(|e| anyhow::anyhow!("{name}: {e}"))
         }
+
         fn required_line(
             get: &dyn Fn(&str) -> Result<String, std::env::VarError>,
             name: &str,
         ) -> anyhow::Result<u32> {
             parse_line(name, required(get, name)?)
         }
-        // PWR is the carrier board's panel power-enable gate. It is NOT
-        // silently optional: defaulting a missing PWR var to "no gate" would
-        // let a typo or forgotten var run a carrier-board panel unpowered,
-        // back-feeding its lines through the ESD/protection diodes — the exact
-        // hazard the power-first ordering exists to prevent. So a missing
-        // PWR_LINE is only allowed when the operator *explicitly* opts out with
-        // CORKBOARD_PANEL_NO_PWR=1 (a bare HAT with no gate to switch);
-        // otherwise it's a hard error.
+
         fn pwr_line(
             get: &dyn Fn(&str) -> Result<String, std::env::VarError>,
         ) -> anyhow::Result<Option<u32>> {
             match get("CORKBOARD_PANEL_PWR_LINE") {
-                Ok(v) => Ok(Some(parse_line("CORKBOARD_PANEL_PWR_LINE", v)?)),
+                Ok(value) => Ok(Some(parse_line("CORKBOARD_PANEL_PWR_LINE", value)?)),
                 Err(e @ std::env::VarError::NotUnicode(_)) => {
                     Err(anyhow::anyhow!("CORKBOARD_PANEL_PWR_LINE: {e}"))
                 }
                 Err(std::env::VarError::NotPresent) => match get("CORKBOARD_PANEL_NO_PWR") {
-                    Ok(v) if v == "1" => Ok(None),
-                    Ok(v) => Err(anyhow::anyhow!(
-                        "CORKBOARD_PANEL_NO_PWR must be \"1\" if set, got {v:?}"
+                    Ok(value) if value == "1" => Ok(None),
+                    Ok(value) => Err(anyhow::anyhow!(
+                        "CORKBOARD_PANEL_NO_PWR must be \"1\" if set, got {value:?}"
                     )),
-                    Err(_) => Err(anyhow::anyhow!(
-                        "CORKBOARD_PANEL_PWR_LINE is not set; set it to the panel's \
-                         power-enable line, or set CORKBOARD_PANEL_NO_PWR=1 for a bare \
-                         HAT with no power gate"
+                    Err(e @ std::env::VarError::NotUnicode(_)) => {
+                        Err(anyhow::anyhow!("CORKBOARD_PANEL_NO_PWR: {e}"))
+                    }
+                    Err(std::env::VarError::NotPresent) => Err(anyhow::anyhow!(
+                        "CORKBOARD_PANEL_PWR_LINE is not set; set it to the panel power line, \
+                         or set CORKBOARD_PANEL_NO_PWR=1 for a bare HAT with no power gate"
                     )),
                 },
             }
         }
+
         Ok(PanelConfig {
-            spi_path: get("CORKBOARD_PANEL_SPI").unwrap_or_else(|_| "/dev/spidev0.0".to_string()),
+            spi_path: optional_with_default(get, "CORKBOARD_PANEL_SPI", "/dev/spidev0.0")?,
             gpiochip_path: required(get, "CORKBOARD_PANEL_GPIOCHIP")?,
             rst_line: required_line(get, "CORKBOARD_PANEL_RST_LINE")?,
             dc_line: required_line(get, "CORKBOARD_PANEL_DC_LINE")?,
@@ -186,331 +261,356 @@ impl PanelConfig {
     }
 }
 
-struct Inner {
-    spi: Box<dyn SpiBus>,
-    rst: Box<dyn GpioLine>,
-    dc: Box<dyn GpioLine>,
-    busy: Box<dyn GpioLine>,
-    /// The carrier board's panel power-enable gate, if wired. Re-asserted high
-    /// at the top of every render (`power_up`), and dropped low as a hard rail
-    /// cut on failure (`emergency_power_off`). Holding the handle also keeps
-    /// the line claimed for the `Panel`'s lifetime — dropping it would release
-    /// the line back to the kernel and let it float.
-    pwr: Option<Box<dyn GpioLine>>,
-}
-
 pub struct Panel {
-    inner: Mutex<Inner>,
+    config: PanelConfig,
 }
 
-#[cfg(target_os = "linux")]
 impl Panel {
-    pub fn open(cfg: &PanelConfig) -> anyhow::Result<Self> {
-        let mut chip = Chip::new(&cfg.gpiochip_path)?;
+    pub fn new(config: PanelConfig) -> Self {
+        Self { config }
+    }
 
-        fn request_line(
-            chip: &mut Chip,
-            line: u32,
-            flags: LineRequestFlags,
-            default: u8,
-            consumer: &str,
-        ) -> anyhow::Result<Box<dyn GpioLine>> {
-            Ok(Box::new(
-                chip.get_line(line)?.request(flags, default, consumer)?,
-            ))
-        }
+    pub fn from_env() -> anyhow::Result<Self> {
+        Ok(Self::new(PanelConfig::from_env()?))
+    }
 
-        // Power the panel before driving *anything* into it — GPIO or SPI.
-        // Waveshare's `module_init()` asserts PWR before it opens SPI or
-        // touches RST/DC. Driving a line into a panel whose power gate is off
-        // back-feeds current through its ESD/input protection diodes; that's
-        // true of a logic-high RST *and* of the CS/SCLK/MOSI idle levels that
-        // opening spidev can drive. So PWR is claimed-and-asserted first
-        // (`request()` sets the line atomically as it claims it, leaving no
-        // claimed-but-low window), then SPI is brought up, then the remaining
-        // GPIOs. RST defaults *low* until the deliberate reset pulse in
-        // `init`.
-        //
-        // We do NOT init the panel here: init happens per render (see
-        // `render`), so `open()` only brings the hardware up and leaves the
-        // panel idle until the first `show()`.
-        let pwr = cfg
-            .pwr_line
-            .map(|line| {
-                request_line(
-                    &mut chip,
-                    line,
-                    LineRequestFlags::OUTPUT,
-                    1,
-                    "corkboard-panel-pwr",
-                )
-            })
-            .transpose()?;
-
-        let mut spi = Spidev::open(&cfg.spi_path)?;
-        spi.configure(
-            &SpidevOptions::new()
-                .bits_per_word(8)
-                .max_speed_hz(4_000_000)
-                .mode(SpiModeFlags::SPI_MODE_0)
-                .build(),
-        )?;
-
-        let rst = request_line(
-            &mut chip,
-            cfg.rst_line,
-            LineRequestFlags::OUTPUT,
-            0,
-            "corkboard-panel-rst",
-        )?;
-        let dc = request_line(
-            &mut chip,
-            cfg.dc_line,
-            LineRequestFlags::OUTPUT,
-            0,
-            "corkboard-panel-dc",
-        )?;
-        let busy = request_line(
-            &mut chip,
-            cfg.busy_line,
-            LineRequestFlags::INPUT,
-            0,
-            "corkboard-panel-busy",
-        )?;
-
-        Ok(Panel {
-            inner: Mutex::new(Inner {
-                spi: Box::new(spi),
-                rst,
-                dc,
-                busy,
-                pwr,
-            }),
-        })
+    fn show_with_opener(&self, png: &[u8], opener: &dyn HostOpener) -> anyhow::Result<()> {
+        let img = image::load_from_memory(png)?.to_rgb8();
+        let frame = pack(&img)?;
+        let resources = opener.open(&self.config)?;
+        let mut session = Session::new(resources);
+        run_refresh(&mut session, &frame)
     }
 }
 
 impl Display for Panel {
     fn show(&self, png: &[u8]) -> anyhow::Result<()> {
-        let img = image::load_from_memory(png)?.to_rgb8();
-        let packed = pack(&img)?;
+        self.show_with_opener(png, &RealOpener)
+    }
+}
 
-        let mut inner = self.inner.lock().unwrap();
-        let result = render(&mut inner, &packed);
-        if result.is_err() {
-            // A render can only fail with the rail live between `init`'s
-            // POWER_ON and the refresh's POWER_OFF. Clear the high-voltage rail
-            // — the acute damage hazard — before returning: a best-effort SPI
-            // POWER_OFF plus a hard PWR-gate drop that works even if SPI is the
-            // thing that failed. (If the failure was before POWER_ON this is a
-            // harmless extra shutdown; not worth tracking rail state to avoid.)
-            // The next render's `power_up` + reset recovers everything.
-            emergency_power_off(&mut inner);
+struct HostResources {
+    spi: Option<Box<dyn SpiBus>>,
+    rst: Option<Box<dyn GpioLine>>,
+    dc: Option<Box<dyn GpioLine>>,
+    busy: Option<Box<dyn GpioLine>>,
+    pwr: Option<Box<dyn GpioLine>>,
+}
+
+impl HostResources {
+    fn empty() -> Self {
+        Self {
+            spi: None,
+            rst: None,
+            dc: None,
+            busy: None,
+            pwr: None,
         }
-        result
     }
 }
 
-/// One full refresh as a self-contained one-shot, mirroring Waveshare's own
-/// `init(); display(); sleep()` usage of this panel. See the module doc
-/// comment for why each render re-inits and ends in deep sleep.
-fn render(inner: &mut Inner, packed: &[u8]) -> anyhow::Result<()> {
-    power_up(inner)?;
-    init(inner)?;
-    send_command(inner, 0x10)?; // DATA_START_TRANSMISSION
-    send_data_bulk(inner, packed)?;
-    turn_on_display(inner)?;
-    deep_sleep(inner)?;
-    Ok(())
+struct OpeningGuard {
+    resources: HostResources,
 }
 
-/// Asserts the carrier PWR gate (if wired) and lets the rail settle, at the
-/// top of every render. Doing it unconditionally every render is what lets a
-/// failed render's `emergency_power_off` drop PWR as a hard kill without any
-/// cross-render state to restore — the next render just re-asserts here. A
-/// near no-op when PWR is already high, and skipped entirely on a bare HAT.
-fn power_up(inner: &mut Inner) -> anyhow::Result<()> {
-    if let Some(pwr) = inner.pwr.as_ref() {
-        pwr.set_value(1)?;
-        std::thread::sleep(PWR_SETTLE);
+impl OpeningGuard {
+    fn new() -> Self {
+        Self {
+            resources: HostResources::empty(),
+        }
     }
-    Ok(())
+
+    fn finish(mut self) -> HostResources {
+        HostResources {
+            spi: self.resources.spi.take(),
+            rst: self.resources.rst.take(),
+            dc: self.resources.dc.take(),
+            busy: self.resources.busy.take(),
+            pwr: self.resources.pwr.take(),
+        }
+    }
 }
 
-/// Hardware reset + full register configuration, ending with POWER_ON (as the
-/// reference does — the refresh in `turn_on_display` follows immediately).
-fn init(inner: &mut Inner) -> anyhow::Result<()> {
-    reset(inner.rst.as_ref())?;
-    wait_busy(inner.busy.as_ref(), BUSY_TIMEOUT)?;
-    std::thread::sleep(Duration::from_millis(30));
-
-    send_command(inner, 0xAA)?;
-    for b in [0x49, 0x55, 0x20, 0x08, 0x09, 0x18] {
-        send_data(inner, b)?;
+impl Drop for OpeningGuard {
+    fn drop(&mut self) {
+        // A failure during open() is before POWER_ON is ever sent, so there's
+        // no live rail to kill — just release whatever was claimed. (After a
+        // successful open, `finish()` has emptied this, so this is a no-op.)
+        teardown_resources(&mut self.resources, false);
     }
-
-    send_command(inner, 0x01)?;
-    send_data(inner, 0x3F)?;
-
-    send_command(inner, 0x00)?;
-    send_data(inner, 0x5F)?;
-    send_data(inner, 0x69)?;
-
-    send_command(inner, 0x03)?;
-    for b in [0x00, 0x54, 0x00, 0x44] {
-        send_data(inner, b)?;
-    }
-
-    send_command(inner, 0x05)?;
-    for b in [0x40, 0x1F, 0x1F, 0x2C] {
-        send_data(inner, b)?;
-    }
-
-    send_command(inner, 0x06)?;
-    for b in [0x6F, 0x1F, 0x17, 0x49] {
-        send_data(inner, b)?;
-    }
-
-    send_command(inner, 0x08)?;
-    for b in [0x6F, 0x1F, 0x1F, 0x22] {
-        send_data(inner, b)?;
-    }
-
-    send_command(inner, 0x30)?;
-    send_data(inner, 0x03)?;
-
-    send_command(inner, 0x50)?;
-    send_data(inner, 0x3F)?;
-
-    send_command(inner, 0x60)?;
-    send_data(inner, 0x02)?;
-    send_data(inner, 0x00)?;
-
-    send_command(inner, 0x61)?;
-    for b in [0x03, 0x20, 0x01, 0xE0] {
-        send_data(inner, b)?;
-    }
-
-    send_command(inner, 0x84)?;
-    send_data(inner, 0x01)?;
-
-    send_command(inner, 0xE3)?;
-    send_data(inner, 0x2F)?;
-
-    send_command(inner, 0x04)?; // POWER_ON
-    wait_busy(inner.busy.as_ref(), BUSY_TIMEOUT)?;
-    Ok(())
 }
 
-/// Powers the rail on, triggers the refresh, and powers it back off — the
-/// panel's actual "paint what was just sent" cycle.
-///
-/// NOTE on a discrepancy between Waveshare's own two reference drivers: the C
-/// demo (`EPD_7IN3E_TurnOnDisplay`) repeats command `0x06` with data
-/// `0x6F,0x1F,0x17,0x49` here (comment: "Second setting") between POWER_ON and
-/// DISPLAY_REFRESH; the Python demo this port follows does not. This holds in
-/// Waveshare's canonical repo too, not just the PhotoPainter kit. Left out to
-/// match Python — flagged as the first suspect if a real panel refuses to
-/// refresh correctly.
-fn turn_on_display(inner: &mut Inner) -> anyhow::Result<()> {
-    send_command(inner, 0x04)?; // POWER_ON
-    wait_busy(inner.busy.as_ref(), BUSY_TIMEOUT)?;
+fn open_resources(
+    cfg: &PanelConfig,
+    backend: &mut dyn HostBackend,
+) -> anyhow::Result<HostResources> {
+    let mut guard = OpeningGuard::new();
 
-    send_command(inner, 0x12)?; // DISPLAY_REFRESH
-    send_data(inner, 0x00)?;
-    wait_busy(inner.busy.as_ref(), BUSY_TIMEOUT)?;
+    // PWR first, before anything is driven into the panel — matching the
+    // reference's module_init (PWR high, then SPI open). Let the rail settle
+    // before the reset pulse follows in `init`.
+    if let Some(line) = cfg.pwr_line {
+        guard.resources.pwr = Some(backend.request_output(line, 1, "corkboard-panel-pwr")?);
+        delay(PWR_SETTLE);
+    }
 
-    send_command(inner, 0x02)?; // POWER_OFF
-    send_data(inner, 0x00)?;
-    wait_busy(inner.busy.as_ref(), BUSY_TIMEOUT)?;
-    Ok(())
+    guard.resources.spi = Some(backend.open_spi(&cfg.spi_path)?);
+    guard.resources.rst = Some(backend.request_output(cfg.rst_line, 0, "corkboard-panel-rst")?);
+    guard.resources.dc = Some(backend.request_output(cfg.dc_line, 0, "corkboard-panel-dc")?);
+    guard.resources.busy = Some(backend.request_input(cfg.busy_line, "corkboard-panel-busy")?);
+
+    Ok(guard.finish())
 }
 
-/// Puts the controller into DEEP_SLEEP — its intended state between renders.
-/// Exited by the hardware reset at the start of the next `init`.
-fn deep_sleep(inner: &mut Inner) -> anyhow::Result<()> {
-    send_command(inner, 0x07)?; // DEEP_SLEEP
-    send_data(inner, 0xA5)?;
-    Ok(())
+struct Session {
+    resources: HostResources,
+    /// Set true only once a refresh has run to completion (through DEEP_SLEEP).
+    /// On the clean path `turn_on_display` already sent POWER_OFF, so teardown
+    /// must NOT re-send it; when this is false (any failure), teardown does a
+    /// best-effort POWER_OFF as the emergency high-voltage-rail kill.
+    clean: bool,
 }
 
-/// Best-effort panel shutdown, ignoring every error — the on-failure safety
-/// net in `show()`. Kills the high-voltage rail (the acute damage hazard) two
-/// ways: the SPI POWER_OFF command (a clean stop, if SPI still works) and
-/// dropping the carrier PWR gate (a hard cut that still works when SPI itself
-/// is what failed). RST/DC are driven low first so they aren't left sitting
-/// high against a panel we're about to unpower (back-feeding its protection
-/// diodes), matching the reference's `module_exit` ordering. No BUSY-wait: a
-/// stuck panel would just hang again, and the commands are sent regardless.
-///
-/// One residual we accept: we don't close spidev, so its CS line keeps idling
-/// high against the now-unpowered panel until the next render's `power_up`.
-/// That's a mild, current-limited back-feed on a single line (the reference
-/// tolerates the same steady state while the panel deep-sleeps between images);
-/// fully closing it would mean GPIO-driven CS, which we deliberately don't do.
-fn emergency_power_off(inner: &mut Inner) {
-    let _ = send_command(inner, 0x02); // POWER_OFF
-    let _ = send_data(inner, 0x00);
-    let _ = inner.rst.set_value(0);
-    let _ = inner.dc.set_value(0);
-    if let Some(pwr) = inner.pwr.as_ref() {
+impl Session {
+    fn new(resources: HostResources) -> Self {
+        Self {
+            resources,
+            clean: false,
+        }
+    }
+
+    fn send_command(&mut self, command: u8) -> anyhow::Result<()> {
+        send_command(&mut self.resources, command)
+    }
+
+    fn send_data(&mut self, data: u8) -> anyhow::Result<()> {
+        send_data(&mut self.resources, data)
+    }
+
+    fn send_data_bulk(&mut self, data: &[u8]) -> anyhow::Result<()> {
+        send_data_bulk(&mut self.resources, data)
+    }
+
+    fn busy(&self) -> anyhow::Result<&dyn GpioLine> {
+        self.resources
+            .busy
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("BUSY line is not open"))
+    }
+
+    fn rst(&self) -> anyhow::Result<&dyn GpioLine> {
+        self.resources
+            .rst
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("RST line is not open"))
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        // Emergency POWER_OFF only when the refresh didn't finish cleanly.
+        teardown_resources(&mut self.resources, !self.clean);
+    }
+}
+
+/// Best-effort release of the host resources, run by both guards' `Drop` so it
+/// happens on every exit path. `send_power_off` requests the emergency HV kill
+/// (POWER_OFF 0x02,0x00) — used only when a refresh did not complete cleanly;
+/// on the clean path `turn_on_display` already powered off, so re-sending it
+/// after DEEP_SLEEP would just poke a sleeping controller (the reference's
+/// module_exit sends no command here). RST/DC are driven low, then SPI is
+/// closed, then PWR is dropped — the reference's module_exit order (SPI
+/// released before power is cut), so no line is left driving an unpowered
+/// panel. Every step ignores errors; nothing panics.
+fn teardown_resources(resources: &mut HostResources, send_power_off: bool) {
+    if send_power_off {
+        let _ = send_command(resources, 0x02);
+        let _ = send_data(resources, 0x00);
+    }
+
+    if let Some(rst) = resources.rst.as_ref() {
+        let _ = rst.set_value(0);
+    }
+    if let Some(dc) = resources.dc.as_ref() {
+        let _ = dc.set_value(0);
+    }
+
+    if let Some(mut spi) = resources.spi.take() {
+        let _ = spi.close();
+        drop(spi);
+    }
+
+    if let Some(pwr) = resources.pwr.as_ref() {
         let _ = pwr.set_value(0);
     }
 }
 
-fn reset(rst: &dyn GpioLine) -> anyhow::Result<()> {
-    rst.set_value(1)?;
-    std::thread::sleep(Duration::from_millis(20));
-    rst.set_value(0)?;
-    std::thread::sleep(Duration::from_millis(2));
-    rst.set_value(1)?;
-    std::thread::sleep(Duration::from_millis(20));
+fn run_refresh(session: &mut Session, frame: &[u8]) -> anyhow::Result<()> {
+    init(session)?;
+    session.send_command(0x10)?;
+    session.send_data_bulk(frame)?;
+    turn_on_display(session)?;
+    deep_sleep(session)?;
+    // Reached only if every step above succeeded: the panel is powered off
+    // (by turn_on_display) and asleep, so teardown skips the emergency POWER_OFF.
+    session.clean = true;
     Ok(())
 }
 
-/// Polls BUSY until it reads idle, or errors on timeout. BUSY reads low while
-/// the panel is busy, high when idle (Waveshare's polarity for this panel —
-/// not the more common inverse). Waveshare waits unconditionally; we cap it
-/// (see `BUSY_TIMEOUT`) so a stuck panel errors this render instead of hanging
-/// the render thread forever.
+fn init(session: &mut Session) -> anyhow::Result<()> {
+    reset(session.rst()?)?;
+    wait_busy(session.busy()?, BUSY_TIMEOUT)?;
+    delay(Duration::from_millis(30));
+
+    session.send_command(0xAA)?;
+    for byte in [0x49, 0x55, 0x20, 0x08, 0x09, 0x18] {
+        session.send_data(byte)?;
+    }
+
+    session.send_command(0x01)?;
+    session.send_data(0x3F)?;
+
+    session.send_command(0x00)?;
+    session.send_data(0x5F)?;
+    session.send_data(0x69)?;
+
+    session.send_command(0x03)?;
+    for byte in [0x00, 0x54, 0x00, 0x44] {
+        session.send_data(byte)?;
+    }
+
+    session.send_command(0x05)?;
+    for byte in [0x40, 0x1F, 0x1F, 0x2C] {
+        session.send_data(byte)?;
+    }
+
+    session.send_command(0x06)?;
+    for byte in [0x6F, 0x1F, 0x17, 0x49] {
+        session.send_data(byte)?;
+    }
+
+    session.send_command(0x08)?;
+    for byte in [0x6F, 0x1F, 0x1F, 0x22] {
+        session.send_data(byte)?;
+    }
+
+    session.send_command(0x30)?;
+    session.send_data(0x03)?;
+
+    session.send_command(0x50)?;
+    session.send_data(0x3F)?;
+
+    session.send_command(0x60)?;
+    session.send_data(0x02)?;
+    session.send_data(0x00)?;
+
+    session.send_command(0x61)?;
+    for byte in [0x03, 0x20, 0x01, 0xE0] {
+        session.send_data(byte)?;
+    }
+
+    session.send_command(0x84)?;
+    session.send_data(0x01)?;
+
+    session.send_command(0xE3)?;
+    session.send_data(0x2F)?;
+
+    session.send_command(0x04)?;
+    wait_busy(session.busy()?, BUSY_TIMEOUT)?;
+    Ok(())
+}
+
+fn turn_on_display(session: &mut Session) -> anyhow::Result<()> {
+    session.send_command(0x04)?;
+    wait_busy(session.busy()?, BUSY_TIMEOUT)?;
+
+    // Python does not repeat command 0x06 here. The C demo does. If a real
+    // panel will not refresh, this is the first place to compare.
+    session.send_command(0x12)?;
+    session.send_data(0x00)?;
+    wait_busy(session.busy()?, BUSY_TIMEOUT)?;
+
+    session.send_command(0x02)?;
+    session.send_data(0x00)?;
+    wait_busy(session.busy()?, BUSY_TIMEOUT)?;
+    Ok(())
+}
+
+fn deep_sleep(session: &mut Session) -> anyhow::Result<()> {
+    session.send_command(0x07)?;
+    session.send_data(0xA5)?;
+    delay(Duration::from_secs(2));
+    Ok(())
+}
+
+fn reset(rst: &dyn GpioLine) -> anyhow::Result<()> {
+    rst.set_value(1)?;
+    delay(Duration::from_millis(20));
+    rst.set_value(0)?;
+    delay(Duration::from_millis(2));
+    rst.set_value(1)?;
+    delay(Duration::from_millis(20));
+    Ok(())
+}
+
 fn wait_busy(busy: &dyn GpioLine, timeout: Duration) -> anyhow::Result<()> {
     let deadline = Instant::now() + timeout;
     while busy.get_value()? == 0 {
-        if Instant::now() > deadline {
-            anyhow::bail!("panel BUSY line never went idle (timed out after {timeout:?})");
+        if Instant::now() >= deadline {
+            anyhow::bail!("panel BUSY line never went idle within {timeout:?}");
         }
-        std::thread::sleep(Duration::from_millis(5));
+        delay(Duration::from_millis(5));
     }
     Ok(())
 }
 
-fn send_command(inner: &mut Inner, cmd: u8) -> anyhow::Result<()> {
-    inner.dc.set_value(0)?;
-    inner.spi.write_all(&[cmd])?;
+fn delay(duration: Duration) {
+    #[cfg(not(test))]
+    std::thread::sleep(duration);
+    #[cfg(test)]
+    let _ = duration;
+}
+
+fn send_command(resources: &mut HostResources, command: u8) -> anyhow::Result<()> {
+    let dc = resources
+        .dc
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("DC line is not open"))?;
+    dc.set_value(0)?;
+    let spi = resources
+        .spi
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("SPI is not open"))?;
+    spi.write_all(&[command])?;
     Ok(())
 }
 
-fn send_data(inner: &mut Inner, data: u8) -> anyhow::Result<()> {
-    inner.dc.set_value(1)?;
-    inner.spi.write_all(&[data])?;
+fn send_data(resources: &mut HostResources, data: u8) -> anyhow::Result<()> {
+    let dc = resources
+        .dc
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("DC line is not open"))?;
+    dc.set_value(1)?;
+    let spi = resources
+        .spi
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("SPI is not open"))?;
+    spi.write_all(&[data])?;
     Ok(())
 }
 
-/// Sends a large buffer as a sequence of plain writes, chunked to stay under
-/// the kernel `spidev` driver's per-write transfer cap (`SPI_CHUNK`). This
-/// matches how Waveshare's Python driver behaves once `spidev.writebytes2`
-/// splits a buffer bigger than `bufsiz` — the proven-safe path for this panel.
-///
-/// Do NOT try to hold chip-select asserted across chunks via `cs_change` on a
-/// manual `SpidevTransfer`: the `spidev` crate documents `cs_change` as
-/// "deselect device before starting the next transfer", so it *adds* CS edges
-/// rather than removing them. If a real panel ever shows a torn frame, raise
-/// the kernel's `spidev.bufsiz` and send the whole 192,000-byte frame in one
-/// write instead.
-fn send_data_bulk(inner: &mut Inner, data: &[u8]) -> anyhow::Result<()> {
-    inner.dc.set_value(1)?;
+fn send_data_bulk(resources: &mut HostResources, data: &[u8]) -> anyhow::Result<()> {
+    let dc = resources
+        .dc
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("DC line is not open"))?;
+    dc.set_value(1)?;
+    let spi = resources
+        .spi
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("SPI is not open"))?;
     for chunk in data.chunks(SPI_CHUNK) {
-        inner.spi.write_all(chunk)?;
+        spi.write_all(chunk)?;
     }
     Ok(())
 }
@@ -518,21 +618,17 @@ fn send_data_bulk(inner: &mut Inner, data: &[u8]) -> anyhow::Result<()> {
 fn nearest_colour(rgb: [u8; 3]) -> Colour {
     Colour::ALL
         .iter()
-        .min_by_key(|c| {
-            let p = c.rgb();
-            let dr = p[0] as i32 - rgb[0] as i32;
-            let dg = p[1] as i32 - rgb[1] as i32;
-            let db = p[2] as i32 - rgb[2] as i32;
+        .min_by_key(|colour| {
+            let palette = colour.rgb();
+            let dr = palette[0] as i32 - rgb[0] as i32;
+            let dg = palette[1] as i32 - rgb[1] as i32;
+            let db = palette[2] as i32 - rgb[2] as i32;
             dr * dr + dg * dg + db * db
         })
         .cloned()
         .expect("Colour::ALL is non-empty")
 }
 
-/// Quantises an RGB image (expected to already be exact-palette, per
-/// `render.rs`'s dithering guarantee — nearest-match here is a safety net, not
-/// the primary quantisation step) into the panel's packed 4-bit-per-pixel
-/// format: two pixels per byte, high nibble first.
 fn pack(rgb: &image::RgbImage) -> anyhow::Result<Vec<u8>> {
     if rgb.width() as usize != WIDTH || rgb.height() as usize != HEIGHT {
         anyhow::bail!(
@@ -543,9 +639,10 @@ fn pack(rgb: &image::RgbImage) -> anyhow::Result<Vec<u8>> {
             rgb.height()
         );
     }
+
     let codes: Vec<u8> = rgb
         .pixels()
-        .map(|p| nearest_colour([p[0], p[1], p[2]]).panel_code())
+        .map(|pixel| nearest_colour([pixel[0], pixel[1], pixel[2]]).panel_code())
         .collect();
     let mut packed = vec![0u8; codes.len() / 2];
     for (i, pair) in codes.chunks(2).enumerate() {
@@ -557,15 +654,253 @@ fn pack(rgb: &image::RgbImage) -> anyhow::Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use std::collections::VecDeque;
+    use std::ffi::OsString;
+    use std::sync::{Arc, Mutex};
 
-    /// Builds a getter closure for `PanelConfig::from_getter` backed by a
-    /// fixed list of pairs, instead of touching real process env vars (which
-    /// would race with every other test running in parallel).
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum Event {
+        LineSet(&'static str, u8),
+        LineGet(&'static str),
+        SpiOpen,
+        SpiWrite(Vec<u8>),
+        SpiClose,
+    }
+
+    type Log = Arc<Mutex<Vec<Event>>>;
+
+    fn event_log() -> Log {
+        Arc::new(Mutex::new(Vec::new()))
+    }
+
+    #[derive(Clone)]
+    struct FakeGpio {
+        name: &'static str,
+        state: Arc<Mutex<FakeGpioState>>,
+        log: Log,
+    }
+
+    #[derive(Default)]
+    struct FakeGpioState {
+        value: u8,
+        fail_set: bool,
+        fail_get: bool,
+        reads: VecDeque<Result<u8, &'static str>>,
+    }
+
+    impl FakeGpio {
+        fn new(name: &'static str, log: Log) -> Self {
+            Self {
+                name,
+                state: Arc::new(Mutex::new(FakeGpioState::default())),
+                log,
+            }
+        }
+
+        fn idle(name: &'static str, log: Log) -> Self {
+            let line = Self::new(name, log);
+            line.set_value(1).unwrap();
+            line
+        }
+
+        fn failing_get(name: &'static str, log: Log) -> Self {
+            let line = Self::new(name, log);
+            line.state.lock().unwrap().fail_get = true;
+            line
+        }
+
+        fn value(&self) -> u8 {
+            self.state.lock().unwrap().value
+        }
+    }
+
+    impl GpioLine for FakeGpio {
+        fn set_value(&self, value: u8) -> anyhow::Result<()> {
+            self.log
+                .lock()
+                .unwrap()
+                .push(Event::LineSet(self.name, value));
+            let mut state = self.state.lock().unwrap();
+            state.value = value;
+            if state.fail_set {
+                anyhow::bail!("fake gpio set failure");
+            }
+            Ok(())
+        }
+
+        fn get_value(&self) -> anyhow::Result<u8> {
+            self.log.lock().unwrap().push(Event::LineGet(self.name));
+            let mut state = self.state.lock().unwrap();
+            if state.fail_get {
+                anyhow::bail!("fake gpio read failure");
+            }
+            match state.reads.pop_front() {
+                Some(Ok(value)) => Ok(value),
+                Some(Err(message)) => anyhow::bail!(message),
+                None => Ok(state.value),
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    struct FakeSpi {
+        state: Arc<Mutex<FakeSpiState>>,
+        log: Log,
+    }
+
+    #[derive(Default)]
+    struct FakeSpiState {
+        writes: Vec<Vec<u8>>,
+        closed: bool,
+        fail_all: bool,
+        fail_on_command: Option<u8>,
+        fail_on_bulk: bool,
+        fail_close: bool,
+    }
+
+    impl FakeSpi {
+        fn new(log: Log) -> Self {
+            Self {
+                state: Arc::new(Mutex::new(FakeSpiState::default())),
+                log,
+            }
+        }
+
+        fn failing_all(log: Log) -> Self {
+            let spi = Self::new(log);
+            spi.state.lock().unwrap().fail_all = true;
+            spi
+        }
+
+        fn failing_on_command(log: Log, command: u8) -> Self {
+            let spi = Self::new(log);
+            spi.state.lock().unwrap().fail_on_command = Some(command);
+            spi
+        }
+
+        fn failing_on_bulk(log: Log) -> Self {
+            let spi = Self::new(log);
+            spi.state.lock().unwrap().fail_on_bulk = true;
+            spi
+        }
+
+        fn writes(&self) -> Vec<Vec<u8>> {
+            self.state.lock().unwrap().writes.clone()
+        }
+
+        fn closed(&self) -> bool {
+            self.state.lock().unwrap().closed
+        }
+    }
+
+    impl SpiBus for FakeSpi {
+        fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+            self.log.lock().unwrap().push(Event::SpiWrite(buf.to_vec()));
+            let mut state = self.state.lock().unwrap();
+            state.writes.push(buf.to_vec());
+            if state.fail_all
+                || state.fail_on_command == buf.first().copied()
+                || (state.fail_on_bulk && buf.len() > 1)
+            {
+                return Err(std::io::Error::other("fake spi write failure"));
+            }
+            Ok(())
+        }
+
+        fn close(&mut self) -> std::io::Result<()> {
+            self.log.lock().unwrap().push(Event::SpiClose);
+            let mut state = self.state.lock().unwrap();
+            state.closed = true;
+            if state.fail_close {
+                return Err(std::io::Error::other("fake spi close failure"));
+            }
+            Ok(())
+        }
+    }
+
+    struct FakeBackend {
+        spi: FakeSpi,
+        rst: FakeGpio,
+        dc: FakeGpio,
+        busy: FakeGpio,
+        pwr: FakeGpio,
+        log: Log,
+    }
+
+    impl FakeBackend {
+        fn new(log: Log, spi: FakeSpi, busy: FakeGpio) -> Self {
+            Self {
+                spi,
+                rst: FakeGpio::new("rst", log.clone()),
+                dc: FakeGpio::new("dc", log.clone()),
+                busy,
+                pwr: FakeGpio::new("pwr", log.clone()),
+                log,
+            }
+        }
+    }
+
+    impl HostBackend for FakeBackend {
+        fn request_output(
+            &mut self,
+            _line: u32,
+            initial: u8,
+            consumer: &'static str,
+        ) -> anyhow::Result<Box<dyn GpioLine>> {
+            let line = match consumer {
+                "corkboard-panel-pwr" => self.pwr.clone(),
+                "corkboard-panel-rst" => self.rst.clone(),
+                "corkboard-panel-dc" => self.dc.clone(),
+                _ => anyhow::bail!("unexpected output consumer {consumer}"),
+            };
+            line.set_value(initial)?;
+            Ok(Box::new(line))
+        }
+
+        fn request_input(
+            &mut self,
+            _line: u32,
+            consumer: &'static str,
+        ) -> anyhow::Result<Box<dyn GpioLine>> {
+            if consumer != "corkboard-panel-busy" {
+                anyhow::bail!("unexpected input consumer {consumer}");
+            }
+            Ok(Box::new(self.busy.clone()))
+        }
+
+        fn open_spi(&mut self, _path: &str) -> anyhow::Result<Box<dyn SpiBus>> {
+            self.log.lock().unwrap().push(Event::SpiOpen);
+            Ok(Box::new(self.spi.clone()))
+        }
+    }
+
+    #[derive(Clone)]
+    struct RecordingOpener {
+        backend: Arc<Mutex<FakeBackend>>,
+    }
+
+    impl RecordingOpener {
+        fn new(log: Log, spi: FakeSpi, busy: FakeGpio) -> Self {
+            Self {
+                backend: Arc::new(Mutex::new(FakeBackend::new(log, spi, busy))),
+            }
+        }
+
+        fn pwr(&self) -> FakeGpio {
+            self.backend.lock().unwrap().pwr.clone()
+        }
+    }
+
+    impl HostOpener for RecordingOpener {
+        fn open(&self, cfg: &PanelConfig) -> anyhow::Result<HostResources> {
+            open_resources(cfg, &mut *self.backend.lock().unwrap())
+        }
+    }
+
     fn env_from(
         pairs: &'static [(&'static str, &'static str)],
     ) -> impl Fn(&str) -> Result<String, std::env::VarError> {
-        move |name: &str| {
+        move |name| {
             pairs
                 .iter()
                 .find(|(key, _)| *key == name)
@@ -574,257 +909,17 @@ mod tests {
         }
     }
 
-    /// A minimal valid env: all required pins plus the explicit PWR opt-out
-    /// (`NO_PWR=1`), since a missing PWR var is now an error rather than a
-    /// silent `None`. Tests that want a real PWR line override with PWR_LINE.
-    const REQUIRED_PINS: &[(&str, &str)] = &[
-        ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
-        ("CORKBOARD_PANEL_RST_LINE", "5"),
-        ("CORKBOARD_PANEL_DC_LINE", "6"),
-        ("CORKBOARD_PANEL_BUSY_LINE", "7"),
-        ("CORKBOARD_PANEL_NO_PWR", "1"),
-    ];
-
-    #[test]
-    fn from_getter_uses_spi_default_and_leaves_pwr_none_when_opted_out() {
-        let get = env_from(REQUIRED_PINS);
-        let cfg = PanelConfig::from_getter(&get).unwrap();
-
-        assert_eq!(cfg.spi_path, "/dev/spidev0.0");
-        assert_eq!(cfg.gpiochip_path, "/dev/gpiochip0");
-        assert_eq!(cfg.rst_line, 5);
-        assert_eq!(cfg.dc_line, 6);
-        assert_eq!(cfg.busy_line, 7);
-        assert_eq!(cfg.pwr_line, None);
-    }
-
-    /// The safety fix: a missing PWR var with no explicit opt-out must be a
-    /// hard error, not a silent `None` that would run a carrier-board panel
-    /// unpowered.
-    #[test]
-    fn from_getter_errors_when_pwr_is_neither_set_nor_explicitly_opted_out() {
-        let get = env_from(&[
-            ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
-            ("CORKBOARD_PANEL_RST_LINE", "5"),
-            ("CORKBOARD_PANEL_DC_LINE", "6"),
-            ("CORKBOARD_PANEL_BUSY_LINE", "7"),
-            // neither CORKBOARD_PANEL_PWR_LINE nor CORKBOARD_PANEL_NO_PWR set
-        ]);
-
-        assert!(PanelConfig::from_getter(&get).is_err());
-    }
-
-    /// The opt-out must be exactly `1`, so a stray `NO_PWR=0` (operator meaning
-    /// "no, I do have a gate") can't be misread as "opt out of PWR".
-    #[test]
-    fn from_getter_errors_when_no_pwr_is_not_exactly_one() {
-        let get = env_from(&[
-            ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
-            ("CORKBOARD_PANEL_RST_LINE", "5"),
-            ("CORKBOARD_PANEL_DC_LINE", "6"),
-            ("CORKBOARD_PANEL_BUSY_LINE", "7"),
-            ("CORKBOARD_PANEL_NO_PWR", "0"),
-        ]);
-
-        assert!(PanelConfig::from_getter(&get).is_err());
-    }
-
-    /// A real PWR line takes precedence over the opt-out path entirely.
-    #[test]
-    fn from_getter_uses_pwr_line_when_set_even_without_opt_out() {
-        let get = env_from(&[
-            ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
-            ("CORKBOARD_PANEL_RST_LINE", "5"),
-            ("CORKBOARD_PANEL_DC_LINE", "6"),
-            ("CORKBOARD_PANEL_BUSY_LINE", "7"),
-            ("CORKBOARD_PANEL_PWR_LINE", "3"),
-        ]);
-
-        assert_eq!(PanelConfig::from_getter(&get).unwrap().pwr_line, Some(3));
-    }
-
-    #[test]
-    fn from_getter_errors_when_a_required_pin_is_missing() {
-        let get = env_from(&[
-            ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
-            ("CORKBOARD_PANEL_RST_LINE", "5"),
-            ("CORKBOARD_PANEL_DC_LINE", "6"),
-            // CORKBOARD_PANEL_BUSY_LINE deliberately missing.
-        ]);
-
-        assert!(PanelConfig::from_getter(&get).is_err());
-    }
-
-    #[test]
-    fn from_getter_errors_when_a_pin_does_not_parse_as_u32() {
-        let get = env_from(&[
-            ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
-            ("CORKBOARD_PANEL_RST_LINE", "not-a-number"),
-            ("CORKBOARD_PANEL_DC_LINE", "6"),
-            ("CORKBOARD_PANEL_BUSY_LINE", "7"),
-        ]);
-
-        assert!(PanelConfig::from_getter(&get).is_err());
-    }
-
-    /// Regression test: a set-but-non-Unicode env var must be a hard error,
-    /// not silently treated the same as "unset" (a real bug an earlier review
-    /// caught — `optional_line` used to match on any `Err(_)`).
-    #[test]
-    fn from_getter_errors_on_non_unicode_pwr_line_instead_of_treating_it_as_unset() {
-        fn get(name: &str) -> Result<String, std::env::VarError> {
-            if name == "CORKBOARD_PANEL_PWR_LINE" {
-                return Err(std::env::VarError::NotUnicode(std::ffi::OsString::from(
-                    "bad",
-                )));
-            }
-            env_from(REQUIRED_PINS)(name)
-        }
-
-        assert!(PanelConfig::from_getter(&get).is_err());
-    }
-
-    /// Fake GPIO line: shared state behind `Arc<Mutex<_>>` so a clone kept by
-    /// the test can observe what the code under test did after handing the
-    /// other clone off into a `Box<dyn GpioLine>`.
-    #[derive(Clone, Default)]
-    struct FakeGpio(Arc<Mutex<FakeGpioState>>);
-
-    #[derive(Default)]
-    struct FakeGpioState {
-        value: u8,
-        fail: bool,
-    }
-
-    impl FakeGpio {
-        fn failing() -> Self {
-            let f = FakeGpio::default();
-            f.0.lock().unwrap().fail = true;
-            f
-        }
-
-        /// A busy line reading idle (1) — the normal "not stuck" case.
-        fn idle() -> Self {
-            let f = FakeGpio::default();
-            f.set_value(1).unwrap();
-            f
+    fn config_with_pwr() -> PanelConfig {
+        PanelConfig {
+            spi_path: "/dev/spidev-test".to_string(),
+            gpiochip_path: "/dev/gpiochip-test".to_string(),
+            rst_line: 1,
+            dc_line: 2,
+            busy_line: 3,
+            pwr_line: Some(4),
         }
     }
 
-    impl GpioLine for FakeGpio {
-        fn set_value(&self, value: u8) -> anyhow::Result<()> {
-            self.0.lock().unwrap().value = value;
-            Ok(())
-        }
-
-        fn get_value(&self) -> anyhow::Result<u8> {
-            let state = self.0.lock().unwrap();
-            if state.fail {
-                anyhow::bail!("fake gpio read failure");
-            }
-            Ok(state.value)
-        }
-    }
-
-    #[derive(Clone, Default)]
-    struct FakeSpi(Arc<Mutex<FakeSpiState>>);
-
-    #[derive(Default)]
-    struct FakeSpiState {
-        writes: Vec<Vec<u8>>,
-        fail: bool,
-        /// If set, only the write whose first byte equals this fails (models
-        /// an SPI error on one specific command, e.g. DISPLAY_REFRESH); every
-        /// other write still succeeds and is recorded.
-        fail_on_command: Option<u8>,
-        /// If set, any multi-byte write fails (models the bulk frame transfer
-        /// failing — the frame is the only write longer than one byte).
-        fail_on_bulk: bool,
-    }
-
-    impl FakeSpi {
-        fn failing() -> Self {
-            let s = FakeSpi::default();
-            s.0.lock().unwrap().fail = true;
-            s
-        }
-
-        fn failing_on_command(cmd: u8) -> Self {
-            let s = FakeSpi::default();
-            s.0.lock().unwrap().fail_on_command = Some(cmd);
-            s
-        }
-
-        fn failing_on_bulk() -> Self {
-            let s = FakeSpi::default();
-            s.0.lock().unwrap().fail_on_bulk = true;
-            s
-        }
-
-        fn writes(&self) -> Vec<Vec<u8>> {
-            self.0.lock().unwrap().writes.clone()
-        }
-    }
-
-    impl SpiBus for FakeSpi {
-        fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-            let mut state = self.0.lock().unwrap();
-            if state.fail
-                || state.fail_on_command == buf.first().copied()
-                || (state.fail_on_bulk && buf.len() > 1)
-            {
-                return Err(std::io::Error::other("fake spi write failure"));
-            }
-            state.writes.push(buf.to_vec());
-            Ok(())
-        }
-    }
-
-    fn fake_inner(spi: FakeSpi, busy: impl GpioLine + 'static) -> Inner {
-        fake_inner_with_dc(spi, busy, FakeGpio::default())
-    }
-
-    /// Like `fake_inner`, but with a PWR gate the test keeps a handle on, to
-    /// assert `power_up`/`emergency_power_off` drive it.
-    fn fake_inner_with_pwr(
-        spi: FakeSpi,
-        busy: impl GpioLine + 'static,
-        pwr: impl GpioLine + 'static,
-    ) -> Inner {
-        Inner {
-            spi: Box::new(spi),
-            rst: Box::new(FakeGpio::default()),
-            dc: Box::new(FakeGpio::default()),
-            busy: Box::new(busy),
-            pwr: Some(Box::new(pwr)),
-        }
-    }
-
-    /// Like `fake_inner`, but lets a test keep its own handle on the DC line
-    /// (e.g. to assert it was left in data mode).
-    fn fake_inner_with_dc(
-        spi: FakeSpi,
-        busy: impl GpioLine + 'static,
-        dc: impl GpioLine + 'static,
-    ) -> Inner {
-        Inner {
-            spi: Box::new(spi),
-            rst: Box::new(FakeGpio::default()),
-            dc: Box::new(dc),
-            busy: Box::new(busy),
-            pwr: None,
-        }
-    }
-
-    fn fake_panel(inner: Inner) -> Panel {
-        Panel {
-            inner: Mutex::new(inner),
-        }
-    }
-
-    /// A well-formed WIDTHxHEIGHT PNG — content doesn't matter to the tests
-    /// that use it, only that it decodes and packs. (It comes out black:
-    /// `RgbImage::new` zero-fills.)
     fn valid_frame_png() -> Vec<u8> {
         let img = image::RgbImage::new(WIDTH as u32, HEIGHT as u32);
         let mut png = Vec::new();
@@ -834,121 +929,34 @@ mod tests {
         png
     }
 
-    /// Command byte of each recorded SPI write (its first byte).
-    fn command_bytes(spi: &FakeSpi) -> Vec<u8> {
-        spi.writes().into_iter().map(|w| w[0]).collect()
+    fn show_with(spi: FakeSpi, log: Log) -> (anyhow::Result<()>, RecordingOpener) {
+        let busy = FakeGpio::idle("busy", log.clone());
+        let opener = RecordingOpener::new(log, spi, busy);
+        let panel = Panel::new(config_with_pwr());
+        let result = panel.show_with_opener(&valid_frame_png(), &opener);
+        (result, opener)
     }
 
-    #[test]
-    fn wait_busy_succeeds_when_line_is_already_idle() {
-        assert!(wait_busy(&FakeGpio::idle(), Duration::from_secs(1)).is_ok());
-    }
-
-    #[test]
-    fn wait_busy_times_out_when_line_never_goes_idle() {
-        let busy = FakeGpio::default(); // 0 = busy, forever
-        assert!(wait_busy(&busy, Duration::from_millis(20)).is_err());
-    }
-
-    #[test]
-    fn wait_busy_propagates_gpio_read_errors() {
-        assert!(wait_busy(&FakeGpio::failing(), Duration::from_secs(1)).is_err());
-    }
-
-    #[test]
-    fn emergency_power_off_sends_power_off_command_and_data() {
-        let spi = FakeSpi::default();
-        let spi_probe = spi.clone();
-        let mut inner = fake_inner(spi, FakeGpio::idle());
-
-        emergency_power_off(&mut inner);
-
-        assert_eq!(spi_probe.writes(), vec![vec![0x02], vec![0x00]]);
-    }
-
-    #[test]
-    fn emergency_power_off_ignores_spi_errors() {
-        let mut inner = fake_inner(FakeSpi::failing(), FakeGpio::idle());
-        // Must not panic even though every write fails — it's the best-effort
-        // path run after a render already failed.
-        emergency_power_off(&mut inner);
-    }
-
-    #[test]
-    fn turn_on_display_sends_power_on_refresh_power_off() {
-        let spi = FakeSpi::default();
-        let spi_probe = spi.clone();
-        let mut inner = fake_inner(spi, FakeGpio::idle());
-
-        turn_on_display(&mut inner).unwrap();
-
-        assert_eq!(
-            spi_probe.writes(),
-            vec![vec![0x04], vec![0x12], vec![0x00], vec![0x02], vec![0x00]]
-        );
-    }
-
-    /// Locks the full init register sequence byte-for-byte against the
-    /// Waveshare reference, ending with POWER_ON (0x04) and no trailing
-    /// power-off — the render's display step powers off, matching the
-    /// reference's per-image init -> display flow.
-    #[test]
-    fn init_sends_the_full_register_sequence_ending_in_power_on() {
-        let spi = FakeSpi::default();
-        let spi_probe = spi.clone();
-        let mut inner = fake_inner(spi, FakeGpio::idle());
-
-        init(&mut inner).unwrap();
-
-        #[rustfmt::skip]
-        let expected = vec![
-            0xAA, 0x49, 0x55, 0x20, 0x08, 0x09, 0x18,
-            0x01, 0x3F,
-            0x00, 0x5F, 0x69,
-            0x03, 0x00, 0x54, 0x00, 0x44,
-            0x05, 0x40, 0x1F, 0x1F, 0x2C,
-            0x06, 0x6F, 0x1F, 0x17, 0x49,
-            0x08, 0x6F, 0x1F, 0x1F, 0x22,
-            0x30, 0x03,
-            0x50, 0x3F,
-            0x60, 0x02, 0x00,
-            0x61, 0x03, 0x20, 0x01, 0xE0,
-            0x84, 0x01,
-            0xE3, 0x2F,
-            0x04,
-        ];
-        assert_eq!(command_bytes(&spi_probe), expected);
-    }
-
-    /// The happy path, asserted as the full control-byte skeleton so a missing
-    /// step (a dropped `0x10`, a skipped frame, a missing POWER_OFF) can't slip
-    /// through. Every command and single data byte is a 1-byte write; the frame
-    /// is the only multi-byte (bulk) write, so splitting on length recovers the
-    /// exact control sequence AND proves the whole frame was sent.
-    #[test]
-    fn show_runs_the_full_one_shot_command_skeleton() {
-        let spi = FakeSpi::default();
-        let spi_probe = spi.clone();
-        let panel = fake_panel(fake_inner(spi, FakeGpio::idle()));
-
-        panel.show(&valid_frame_png()).unwrap();
-
-        let writes = spi_probe.writes();
-        let control: Vec<u8> = writes
+    fn control_bytes(writes: &[Vec<u8>]) -> Vec<u8> {
+        writes
             .iter()
-            .filter(|w| w.len() == 1)
-            .map(|w| w[0])
-            .collect();
-        let frame: Vec<u8> = writes
+            .filter(|write| write.len() == 1)
+            .map(|write| write[0])
+            .collect()
+    }
+
+    fn frame_bytes(writes: &[Vec<u8>]) -> Vec<u8> {
+        writes
             .iter()
-            .filter(|w| w.len() > 1)
+            .filter(|write| write.len() > 1)
             .flatten()
             .copied()
-            .collect();
+            .collect()
+    }
 
-        #[rustfmt::skip]
-        let expected_control = vec![
-            // init: full register config ending in POWER_ON (0x04)
+    #[rustfmt::skip]
+    fn expected_init_control() -> Vec<u8> {
+        vec![
             0xAA, 0x49, 0x55, 0x20, 0x08, 0x09, 0x18,
             0x01, 0x3F,
             0x00, 0x5F, 0x69,
@@ -963,183 +971,181 @@ mod tests {
             0x84, 0x01,
             0xE3, 0x2F,
             0x04,
-            0x10,                          // DATA_START_TRANSMISSION (frame follows)
-            0x04, 0x12, 0x00, 0x02, 0x00,  // POWER_ON, REFRESH, POWER_OFF
-            0x07, 0xA5,                    // DEEP_SLEEP
-        ];
-        assert_eq!(control, expected_control);
-        assert_eq!(frame.len(), WIDTH * HEIGHT / 2, "full frame sent");
-        assert!(
-            frame.iter().all(|&b| b == 0),
-            "black test frame packs to zeroes"
-        );
+        ]
     }
 
-    /// On any render failure with the rail potentially live, `show` must make
-    /// a best-effort POWER_OFF and must NOT proceed to deep sleep. Modelled by
-    /// an SPI error on the DISPLAY_REFRESH command, after POWER_ON succeeded.
-    #[test]
-    fn show_powers_off_and_does_not_deep_sleep_when_a_render_step_fails() {
-        let spi = FakeSpi::failing_on_command(0x12); // DISPLAY_REFRESH fails
-        let spi_probe = spi.clone();
-        let panel = fake_panel(fake_inner(spi, FakeGpio::idle()));
+    fn indices(events: &[Event], needle: &Event) -> Vec<usize> {
+        events
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, event)| (event == needle).then_some(idx))
+            .collect()
+    }
 
-        let result = panel.show(&valid_frame_png());
+    fn assert_teardown_ran(spi: &FakeSpi, opener: &RecordingOpener, events: &[Event]) {
+        assert!(spi.closed(), "SPI was closed");
+        assert_eq!(opener.pwr().value(), 0, "PWR was dropped low");
+
+        let rst_low = indices(events, &Event::LineSet("rst", 0))
+            .last()
+            .copied()
+            .expect("RST low event");
+        let dc_low = indices(events, &Event::LineSet("dc", 0))
+            .last()
+            .copied()
+            .expect("DC low event");
+        let spi_close = indices(events, &Event::SpiClose)
+            .last()
+            .copied()
+            .expect("SPI close event");
+        let pwr_low = indices(events, &Event::LineSet("pwr", 0))
+            .last()
+            .copied()
+            .expect("PWR low event");
+
+        assert!(rst_low < spi_close, "RST low before SPI close");
+        assert!(dc_low < spi_close, "DC low before SPI close");
+        assert!(spi_close < pwr_low, "SPI close before PWR low");
+    }
+
+    #[test]
+    fn happy_path_sends_full_reference_skeleton_and_tears_down() {
+        let log = event_log();
+        let spi = FakeSpi::new(log.clone());
+        let spi_probe = spi.clone();
+        let (result, opener) = show_with(spi, log.clone());
+
+        result.unwrap();
+
+        // Ends at DEEP_SLEEP (0x07,0xA5): the clean-path teardown no longer
+        // re-sends POWER_OFF, so there is no trailing 0x02,0x00.
+        let writes = spi_probe.writes();
+        let mut expected = expected_init_control();
+        expected.extend([0x10, 0x04, 0x12, 0x00, 0x02, 0x00, 0x07, 0xA5]);
+        assert_eq!(control_bytes(&writes), expected);
+
+        let frame = frame_bytes(&writes);
+        assert_eq!(frame.len(), WIDTH * HEIGHT / 2);
+        assert!(frame.iter().all(|&byte| byte == 0x00));
+
+        assert_teardown_ran(&spi_probe, &opener, &log.lock().unwrap());
+    }
+
+    #[test]
+    fn teardown_runs_when_init_power_on_write_fails() {
+        let log = event_log();
+        let spi = FakeSpi::failing_on_command(log.clone(), 0x04);
+        let spi_probe = spi.clone();
+        let (result, opener) = show_with(spi, log.clone());
 
         assert!(result.is_err());
         let writes = spi_probe.writes();
-        assert_eq!(
-            &writes[writes.len() - 2..],
-            [vec![0x02u8], vec![0x00u8]],
-            "ends in a best-effort POWER_OFF"
-        );
-        assert!(
-            !command_bytes(&spi_probe).contains(&0x07),
-            "must not deep-sleep after a failure"
-        );
+        assert!(writes.contains(&vec![0x02]));
+        assert!(writes.contains(&vec![0x00]));
+        assert!(!control_bytes(&writes).contains(&0x07));
+        assert_teardown_ran(&spi_probe, &opener, &log.lock().unwrap());
     }
 
-    /// Same guarantee, but for a failure on the POWER_ON write itself — the
-    /// very command that makes the rail live. The top-level catch in `show`
-    /// still runs a best-effort POWER_OFF and does not deep-sleep.
     #[test]
-    fn show_powers_off_when_the_power_on_write_itself_fails() {
-        let spi = FakeSpi::failing_on_command(0x04); // POWER_ON fails
+    fn teardown_runs_when_bulk_frame_write_fails() {
+        let log = event_log();
+        let spi = FakeSpi::failing_on_bulk(log.clone());
         let spi_probe = spi.clone();
-        let panel = fake_panel(fake_inner(spi, FakeGpio::idle()));
-
-        let result = panel.show(&valid_frame_png());
+        let (result, opener) = show_with(spi, log.clone());
 
         assert!(result.is_err());
         let writes = spi_probe.writes();
-        assert_eq!(
-            &writes[writes.len() - 2..],
-            [vec![0x02u8], vec![0x00u8]],
-            "a POWER_ON send failure still ends in a best-effort POWER_OFF"
-        );
-        assert!(!command_bytes(&spi_probe).contains(&0x07));
+        assert!(writes.contains(&vec![0x02]));
+        assert!(!control_bytes(&writes).contains(&0x07));
+        assert_teardown_ran(&spi_probe, &opener, &log.lock().unwrap());
     }
 
-    /// And for a failure during the bulk frame transfer (after POWER_ON made
-    /// the rail live) — same guarantee: best-effort POWER_OFF, no deep sleep.
     #[test]
-    fn show_powers_off_when_the_frame_write_fails() {
-        let spi = FakeSpi::failing_on_bulk(); // the bulk frame transfer fails
+    fn teardown_runs_when_display_refresh_write_fails() {
+        let log = event_log();
+        let spi = FakeSpi::failing_on_command(log.clone(), 0x12);
         let spi_probe = spi.clone();
-        let panel = fake_panel(fake_inner(spi, FakeGpio::idle()));
-
-        let result = panel.show(&valid_frame_png());
+        let (result, opener) = show_with(spi, log.clone());
 
         assert!(result.is_err());
         let writes = spi_probe.writes();
-        assert_eq!(
-            &writes[writes.len() - 2..],
-            [vec![0x02u8], vec![0x00u8]],
-            "ends in a best-effort POWER_OFF"
-        );
-        assert!(!command_bytes(&spi_probe).contains(&0x07));
-    }
-
-    /// A render asserts the PWR gate at the top and, on success, leaves it
-    /// high (the panel sits in DEEP_SLEEP with power still on between renders).
-    #[test]
-    fn show_asserts_pwr_and_leaves_it_high_on_success() {
-        let pwr = FakeGpio::default(); // starts low, as if never powered
-        let panel = fake_panel(fake_inner_with_pwr(
-            FakeSpi::default(),
-            FakeGpio::idle(),
-            pwr.clone(),
-        ));
-
-        panel.show(&valid_frame_png()).unwrap();
-
-        assert_eq!(pwr.get_value().unwrap(), 1, "PWR left high on success");
-    }
-
-    /// On failure, the PWR gate is dropped low as a hard rail cut — the part
-    /// of the safety net that still works when SPI itself is what failed.
-    #[test]
-    fn show_drops_the_pwr_gate_on_failure() {
-        let pwr = FakeGpio::default();
-        pwr.set_value(1).unwrap(); // starts high, so a drop is observable
-        let panel = fake_panel(fake_inner_with_pwr(
-            FakeSpi::failing_on_command(0x12), // DISPLAY_REFRESH fails
-            FakeGpio::idle(),
-            pwr.clone(),
-        ));
-
-        assert!(panel.show(&valid_frame_png()).is_err());
-
-        assert_eq!(pwr.get_value().unwrap(), 0, "PWR hard-cut low on failure");
+        assert!(writes.contains(&vec![0x02]));
+        assert!(!control_bytes(&writes).contains(&0x07));
+        assert_teardown_ran(&spi_probe, &opener, &log.lock().unwrap());
     }
 
     #[test]
-    fn power_up_reasserts_pwr_after_a_prior_failure_dropped_it() {
-        let pwr = FakeGpio::default(); // low, as a prior emergency left it
-        let mut inner = fake_inner_with_pwr(FakeSpi::default(), FakeGpio::idle(), pwr.clone());
+    fn teardown_does_not_panic_when_all_spi_writes_fail() {
+        let log = event_log();
+        let spi = FakeSpi::failing_all(log.clone());
+        let spi_probe = spi.clone();
+        let (result, opener) = show_with(spi, log.clone());
 
-        power_up(&mut inner).unwrap();
-
-        assert_eq!(pwr.get_value().unwrap(), 1);
+        assert!(result.is_err());
+        assert_teardown_ran(&spi_probe, &opener, &log.lock().unwrap());
     }
 
-    /// The full hard-cut: RST, DC, and PWR are all driven low (so they don't
-    /// sit high against the about-to-be-unpowered panel). Guards against a
-    /// regression that drops any of them. (Strict low-before-PWR *ordering*
-    /// isn't asserted — the fakes are independent, so only final values are
-    /// observable — but the values are the regression that matters.)
     #[test]
-    fn emergency_power_off_drives_rst_dc_and_pwr_low() {
-        let rst = FakeGpio::default();
-        let dc = FakeGpio::default();
-        let pwr = FakeGpio::default();
-        for line in [&rst, &dc, &pwr] {
-            line.set_value(1).unwrap(); // start high, so a drop is observable
-        }
-        let mut inner = Inner {
-            spi: Box::new(FakeSpi::default()),
-            rst: Box::new(rst.clone()),
-            dc: Box::new(dc.clone()),
-            busy: Box::new(FakeGpio::idle()),
-            pwr: Some(Box::new(pwr.clone())),
+    fn pwr_is_asserted_before_spi_is_opened() {
+        let log = event_log();
+        let spi = FakeSpi::new(log.clone());
+        let (result, _opener) = show_with(spi, log.clone());
+
+        result.unwrap();
+        let events = log.lock().unwrap();
+        let pwr_high = indices(&events, &Event::LineSet("pwr", 1))[0];
+        let spi_open = indices(&events, &Event::SpiOpen)[0];
+        assert!(pwr_high < spi_open);
+    }
+
+    #[test]
+    fn send_data_bulk_chunks_without_losing_or_reordering_bytes() {
+        let log = event_log();
+        let spi = FakeSpi::new(log);
+        let spi_probe = spi.clone();
+        let mut resources = HostResources {
+            spi: Some(Box::new(spi)),
+            rst: None,
+            dc: Some(Box::new(FakeGpio::new("dc", event_log()))),
+            busy: None,
+            pwr: None,
         };
-
-        emergency_power_off(&mut inner);
-
-        assert_eq!(rst.get_value().unwrap(), 0, "RST driven low");
-        assert_eq!(dc.get_value().unwrap(), 0, "DC driven low");
-        assert_eq!(pwr.get_value().unwrap(), 0, "PWR dropped low");
-    }
-
-    #[test]
-    fn send_data_bulk_chunks_large_buffers_without_dropping_or_reordering_bytes() {
-        let spi = FakeSpi::default();
-        let spi_probe = spi.clone();
-        let dc = FakeGpio::default();
-        let mut inner = fake_inner_with_dc(spi, FakeGpio::default(), dc.clone());
         let data: Vec<u8> = (0..(SPI_CHUNK * 2 + 100))
-            .map(|i| (i % 256) as u8)
+            .map(|idx| (idx % 251) as u8)
             .collect();
 
-        send_data_bulk(&mut inner, &data).unwrap();
+        send_data_bulk(&mut resources, &data).unwrap();
 
         let writes = spi_probe.writes();
-        assert!(
-            writes.len() > 1,
-            "expected the buffer to be split into chunks"
-        );
-        assert!(writes.iter().all(|c| c.len() <= SPI_CHUNK));
+        assert!(writes.len() > 1);
+        assert!(writes.iter().all(|chunk| chunk.len() <= SPI_CHUNK));
         assert_eq!(writes.concat(), data);
-        assert_eq!(dc.get_value().unwrap(), 1, "DC must be high (data mode)");
+    }
+
+    #[test]
+    fn wait_busy_succeeds_when_idle() {
+        let log = event_log();
+        assert!(wait_busy(&FakeGpio::idle("busy", log), Duration::from_secs(1)).is_ok());
+    }
+
+    #[test]
+    fn wait_busy_times_out_when_line_stays_busy() {
+        let log = event_log();
+        let busy = FakeGpio::new("busy", log);
+        assert!(wait_busy(&busy, Duration::from_millis(1)).is_err());
+    }
+
+    #[test]
+    fn wait_busy_propagates_read_errors() {
+        let log = event_log();
+        assert!(wait_busy(&FakeGpio::failing_get("busy", log), Duration::from_secs(1)).is_err());
     }
 
     #[test]
     fn packs_two_pixels_per_byte_high_nibble_first() {
         let mut img = image::RgbImage::new(WIDTH as u32, HEIGHT as u32);
-        // Pixel 0 = black (0x0), pixel 1 = white (0x1) -> byte 0x01.
         img.put_pixel(0, 0, image::Rgb(Colour::Black.rgb()));
         img.put_pixel(1, 0, image::Rgb(Colour::White.rgb()));
-        // Pixel 2 = red (0x3), pixel 3 = green (0x6) -> byte 0x36.
         img.put_pixel(2, 0, image::Rgb(Colour::Red.rgb()));
         img.put_pixel(3, 0, image::Rgb(Colour::Green.rgb()));
 
@@ -1150,15 +1156,105 @@ mod tests {
     }
 
     #[test]
-    fn rejects_wrong_dimensions() {
+    fn nearest_colour_matches_exact_palette_values() {
+        for colour in Colour::ALL {
+            assert_eq!(
+                nearest_colour(colour.rgb()).panel_code(),
+                colour.panel_code()
+            );
+        }
+    }
+
+    #[test]
+    fn pack_rejects_wrong_dimensions() {
         let img = image::RgbImage::new(10, 10);
         assert!(pack(&img).is_err());
     }
 
     #[test]
-    fn nearest_colour_matches_exact_palette_values() {
-        for c in Colour::ALL {
-            assert_eq!(nearest_colour(c.rgb()).panel_code(), c.panel_code());
+    fn from_getter_errors_when_required_var_is_missing() {
+        let get = env_from(&[
+            ("CORKBOARD_PANEL_RST_LINE", "1"),
+            ("CORKBOARD_PANEL_DC_LINE", "2"),
+            ("CORKBOARD_PANEL_BUSY_LINE", "3"),
+            ("CORKBOARD_PANEL_PWR_LINE", "4"),
+        ]);
+
+        assert!(PanelConfig::from_getter(&get).is_err());
+    }
+
+    #[test]
+    fn from_getter_no_pwr_opt_out_yields_no_pwr_line() {
+        let get = env_from(&[
+            ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
+            ("CORKBOARD_PANEL_RST_LINE", "1"),
+            ("CORKBOARD_PANEL_DC_LINE", "2"),
+            ("CORKBOARD_PANEL_BUSY_LINE", "3"),
+            ("CORKBOARD_PANEL_NO_PWR", "1"),
+        ]);
+
+        let cfg = PanelConfig::from_getter(&get).unwrap();
+        assert_eq!(cfg.spi_path, "/dev/spidev0.0");
+        assert_eq!(cfg.pwr_line, None);
+    }
+
+    #[test]
+    fn from_getter_missing_pwr_without_opt_out_errors() {
+        let get = env_from(&[
+            ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
+            ("CORKBOARD_PANEL_RST_LINE", "1"),
+            ("CORKBOARD_PANEL_DC_LINE", "2"),
+            ("CORKBOARD_PANEL_BUSY_LINE", "3"),
+        ]);
+
+        assert!(PanelConfig::from_getter(&get).is_err());
+    }
+
+    #[test]
+    fn from_getter_non_unicode_pwr_var_errors() {
+        fn get(name: &str) -> Result<String, std::env::VarError> {
+            if name == "CORKBOARD_PANEL_PWR_LINE" {
+                return Err(std::env::VarError::NotUnicode(OsString::from("bad")));
+            }
+            env_from(&[
+                ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
+                ("CORKBOARD_PANEL_RST_LINE", "1"),
+                ("CORKBOARD_PANEL_DC_LINE", "2"),
+                ("CORKBOARD_PANEL_BUSY_LINE", "3"),
+            ])(name)
         }
+
+        assert!(PanelConfig::from_getter(&get).is_err());
+    }
+
+    #[test]
+    fn from_getter_real_pwr_line_parses() {
+        let get = env_from(&[
+            ("CORKBOARD_PANEL_GPIOCHIP", "/dev/gpiochip0"),
+            ("CORKBOARD_PANEL_RST_LINE", "1"),
+            ("CORKBOARD_PANEL_DC_LINE", "2"),
+            ("CORKBOARD_PANEL_BUSY_LINE", "3"),
+            ("CORKBOARD_PANEL_PWR_LINE", "4"),
+        ]);
+
+        let cfg = PanelConfig::from_getter(&get).unwrap();
+        assert_eq!(cfg.pwr_line, Some(4));
+    }
+
+    #[test]
+    fn from_getter_non_unicode_required_var_errors() {
+        fn get(name: &str) -> Result<String, std::env::VarError> {
+            if name == "CORKBOARD_PANEL_GPIOCHIP" {
+                return Err(std::env::VarError::NotUnicode(OsString::from("bad")));
+            }
+            env_from(&[
+                ("CORKBOARD_PANEL_RST_LINE", "1"),
+                ("CORKBOARD_PANEL_DC_LINE", "2"),
+                ("CORKBOARD_PANEL_BUSY_LINE", "3"),
+                ("CORKBOARD_PANEL_PWR_LINE", "4"),
+            ])(name)
+        }
+
+        assert!(PanelConfig::from_getter(&get).is_err());
     }
 }
