@@ -23,7 +23,7 @@ function badgeText(f: FeedInfo): string {
     <div v-if="feeds.length === 0" class="rounded-lg border bg-white p-4 text-sm italic text-neutral-500">
       no feeds configured
     </div>
-    <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div v-else class="space-y-4">
       <div v-for="f in feeds" :key="f.id" class="rounded-lg border bg-white p-4">
         <div class="mb-2 flex items-center justify-between gap-2">
           <span class="text-sm font-medium">{{ f.name }}</span>
