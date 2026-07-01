@@ -364,7 +364,7 @@ mod tests {
             *state.document.lock().unwrap() = doc;
         }
 
-        assert_eq!(state.web_preview.updated_at(), 0);
+        assert_eq!(state.web_preview.render_count(), 0);
 
         let state_for_task = state.clone();
         let render_task = tokio::spawn(async move {
@@ -374,7 +374,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
         assert!(
-            state.web_preview.updated_at() > 0,
+            state.web_preview.render_count() > 0,
             "preview should be updated before the calendar fetch completes"
         );
 

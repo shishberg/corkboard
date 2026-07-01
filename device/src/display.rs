@@ -66,13 +66,6 @@ impl WebPreview {
         }
     }
 
-    /// Timestamp of the last render (millis since epoch; 0 if never). Used by
-    /// tests; production code reads the timestamp via `current()`.
-    #[allow(dead_code)]
-    pub fn updated_at(&self) -> i64 {
-        self.frame.lock().unwrap().updated_at
-    }
-
     /// Number of times `show` has been called. Useful for tests asserting that
     /// a code path performed exactly N renders, not just "at least one".
     #[allow(dead_code)]
