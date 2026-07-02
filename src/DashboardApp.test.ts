@@ -124,6 +124,36 @@ describe('DashboardApp', () => {
     await flushPromises()
     expect(w.text()).toContain('42.8°C')
     expect(w.text()).toContain('1008 MHz')
-    expect(w.text()).toContain('0.52')
+    // Load average is a mini bar graph now; the numbers surface in its tooltip.
+    expect(w.html()).toContain('15m: 0.59 · 5m: 0.58 · 1m: 0.52')
+  })
+
+  it('orders load-avg bars 15m/5m/1m, tallest bar tallest value', async () => {
+    const status = sampleStatus()
+    status.system = {
+      cpuTempC: null,
+      loadAvg1: 2.0,
+      loadAvg5: 1.0,
+      loadAvg15: 0.5,
+      cpuFreqMhz: null,
+      memTotalKb: null,
+      memAvailableKb: null,
+    }
+    vi.spyOn(deviceApi, 'fetchStatus').mockResolvedValue(status)
+    const w = mount(DashboardApp)
+    await flushPromises()
+    const bars = w.findAll('[data-role="load-avg-bar"]')
+    expect(bars).toHaveLength(3)
+    const heights = bars.map((b) => parseFloat(/height:\s*([\d.]+)/.exec(b.attributes('style') ?? '')?.[1] ?? '0'))
+    // 15m (0.5) shortest, 1m (2.0) tallest, in that left-to-right order.
+    expect(heights[0]).toBeLessThan(heights[1])
+    expect(heights[1]).toBeLessThan(heights[2])
+  })
+
+  it('shows a dash for load avg when no data is available', async () => {
+    vi.spyOn(deviceApi, 'fetchStatus').mockResolvedValue(sampleStatus())
+    const w = mount(DashboardApp)
+    await flushPromises()
+    expect(w.findAll('[data-role="load-avg-bar"]')).toHaveLength(0)
   })
 })
